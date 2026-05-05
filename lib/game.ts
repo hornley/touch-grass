@@ -22,7 +22,7 @@ export const QUEST_POOL: Omit<Quest, 'status' | 'progress'>[] = [
   { id: 'quest_11', type: 'object', goal: 1, xpReward: 20, description: 'Find a cup or bottle', targetObject: 'cup' },
   { id: 'quest_12', type: 'object', goal: 1, xpReward: 20, description: 'Find a book', targetObject: 'book' },
   { id: 'quest_14', type: 'object', goal: 1, xpReward: 25, description: 'Find a person', targetObject: 'person' },
-  { id: 'quest_15', type: 'object', goal: 1, xpReward: 25, description: 'Find a cat or dog', targetObject: 'cat' },
+  { id: 'quest_15', type: 'object', goal: 1, xpReward: 25, description: 'Find a cat or dog', targetObject: 'pet' },
 ];
 
 export function getInitialState(): GameState {
