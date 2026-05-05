@@ -70,7 +70,7 @@ export default function Home() {
   const [tabFadeKey, setTabFadeKey] = useState(0);
 
   const lastLocation = gameState?.player.lastLocation ?? null;
-  const { location, error, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance } = useLocation(lastLocation, locationEnabled);
+  const { location, error, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist } = useLocation(lastLocation, locationEnabled);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -152,14 +152,14 @@ export default function Home() {
   }, [gameState]);
 
   useEffect(() => {
-    if (!gameState || !location) return;
+    if (!gameState || !locationEnabled) return;
 
     if (gameState.currentQuest?.type === 'travel') {
       if (!isTracking) startTracking();
     } else {
       if (isTracking) stopTracking();
     }
-  }, [gameState?.currentQuest?.type, isTracking, startTracking, stopTracking]);
+  }, [gameState?.currentQuest?.type, locationEnabled, isTracking, startTracking, stopTracking]);
 
   useEffect(() => {
     if (!gameState || !location || lastMovementDistance <= 0) return;
@@ -204,6 +204,13 @@ export default function Home() {
       saveGameState(s); return s;
     });
   };
+
+  // Returning users: enable location automatically so travel quests can track
+  // without needing to re-tap Start every session.
+  useEffect(() => {
+    if (showWelcome !== false) return;
+    if (!locationEnabled) setLocationEnabled(true);
+  }, [showWelcome, locationEnabled]);
 
   const handlePhotoCapture = useCallback(() => {
     if (!gameState?.currentQuest || gameState.currentQuest.type !== 'photo') return;
@@ -581,8 +588,19 @@ export default function Home() {
                   })}
                 </div>
 
+                {/* GPS debug info */}
+                <div style={{ fontSize: '10px', color: '#4e6878', marginTop: '10px', padding: '8px', background: '#0d1520', borderRadius: '4px' }}>
+                  <div style={{ marginBottom: '4px', color: '#6a8898' }}>GPS DEBUG:</div>
+                  <div>tracking: <span style={{ color: isTracking ? '#4ade80' : '#ef4444' }}>{isTracking ? 'ON' : 'OFF'}</span></div>
+                  <div>accuracy: <span style={{ color: currentAccuracy && currentAccuracy > 100 ? '#ef4444' : '#4ade80' }}>{currentAccuracy !== null ? `${currentAccuracy.toFixed(0)}m` : 'N/A'}</span></div>
+                  <div>segment: <span style={{ color: currentSegmentDist !== null ? (currentSegmentDist < 5 ? '#ef4444' : '#4ade80') : '#6a8898' }}>{currentSegmentDist !== null ? `${currentSegmentDist.toFixed(1)}m` : 'N/A'}</span></div>
+                  <div>speed: <span style={{ color: currentSpeed !== null ? (currentSpeed > 10 ? '#ef4444' : '#4ade80') : '#6a8898' }}>{currentSpeed !== null ? `${currentSpeed.toFixed(1)}m/s` : 'N/A'}</span></div>
+                  <div>cumulative: <span style={{ color: '#d4a030' }}>{cumulativeDistance.toFixed(1)} m</span></div>
+                  <div>lastMovement: <span style={{ color: '#d4a030' }}>{lastMovementDistance.toFixed(1)} m</span></div>
+                </div>
+
                 {/* Actions */}
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                   <button onClick={skipQuest} style={{ fontSize: '10px', color: '#93c5fd', background: 'none', border: '1px solid #1e3a5f', padding: '4px 12px', cursor: 'pointer', fontFamily: 'var(--font-cinzel)' }}>
                     SKIP QUEST
                   </button>
@@ -778,6 +796,23 @@ export default function Home() {
                         <span style={{ fontSize: '11px', color: '#4e6878', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>AWAITING SIGNAL</span>
                       </>
                     )}
+                  </div>
+                )}
+
+                {/* Normal state: still show tracking distance if active */}
+                {!isLoading && !error && location && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    marginTop: '8px', padding: '8px 0',
+                  }}>
+                    {isTracking && (
+                      <span style={{ fontSize: '14px', color: '#4ade80', marginRight: '6px' }}>●</span>
+                    )}
+                    <span style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px' }}>
+                      {isTracking
+                        ? `TRACKING: ${Math.round(cumulativeDistance)} M`
+                        : location.lat.toFixed(5) + ', ' + location.lng.toFixed(5)}
+                    </span>
                   </div>
                 )}
               </div>
