@@ -1,26 +1,120 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ── Animations ─────────────────────────────────────────── */
+
+@keyframes corrupt-breathe {
+  0%, 100% { box-shadow: 0 0 12px rgba(185,28,28,0.35), inset 0 0 8px rgba(185,28,28,0.1); }
+  50%       { box-shadow: 0 0 28px rgba(239,68,68,0.7),  inset 0 0 16px rgba(239,68,68,0.2); }
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+@keyframes slide-down {
+  from { transform: translateY(-110%); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
+
+@keyframes spin-compass {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes amber-flicker {
+  0%, 100% { opacity: 1; }
+  45%       { opacity: 0.75; }
+  55%       { opacity: 0.9; }
+}
+
+@keyframes quest-appear {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Utility classes ────────────────────────────────────── */
+
+.font-display  { font-family: var(--font-cinzel, 'Times New Roman'), serif; }
+.font-terminal { font-family: var(--font-inconsolata, 'Courier New'), monospace; }
+
+.animate-corrupt      { animation: corrupt-breathe 2.2s ease-in-out infinite; }
+.animate-slide-down   { animation: slide-down 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+.animate-fade-up      { animation: fade-up 0.4s ease-out both; }
+.animate-spin-compass { animation: spin-compass 2s linear infinite; }
+.animate-flicker      { animation: amber-flicker 4s ease-in-out infinite; }
+.animate-quest        { animation: quest-appear 0.35s ease-out both; }
+
+/* ── Base ────────────────────────────────────────────────── */
+
+* { box-sizing: border-box; }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: #0d1520;
+  color: #ead7a0;
+  font-family: var(--font-inconsolata, 'Courier New'), monospace;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────── */
+
+::-webkit-scrollbar       { width: 3px; }
+::-webkit-scrollbar-track { background: #070a0f; }
+::-webkit-scrollbar-thumb { background: #1c2c3c; }
+
+/* ── Card panel ─────────────────────────────────────────── */
+
+.rune-panel {
+  background: #172030;
+  border: 1px solid #2a3d52;
+  position: relative;
+  overflow: hidden;
+}
+
+.rune-panel::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(224,170,56,0.05) 0%, transparent 55%);
+  pointer-events: none;
+}
+
+/* ── Segment bar ────────────────────────────────────────── */
+
+.seg-bar { display: flex; gap: 3px; height: 7px; }
+
+.seg-bar__cell {
+  flex: 1;
+  background: #1e2e3e;
+  border: 1px solid #2a3d52;
+  transition: background 0.25s, box-shadow 0.25s;
+}
+
+.seg-bar__cell--filled {
+  background: #d4a030;
+  border-color: #d4a030;
+  box-shadow: 0 0 5px rgba(212,160,48,0.55);
+}
+
+/* ── Section divider ────────────────────────────────────── */
+
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.section-divider__label {
+  font-family: var(--font-cinzel, serif);
+  font-size: 10px;
+  letter-spacing: 3px;
+  color: #7a9aac;
+  white-space: nowrap;
+}
+
+.section-divider__line {
+  flex: 1;
+  height: 1px;
+  background: #2a3d52;
 }
