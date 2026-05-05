@@ -1,0 +1,47 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+npm run dev      # start dev server at localhost:3000
+npm run build    # production build
+npm run lint     # eslint check
+```
+
+No test suite exists yet.
+
+## Architecture
+
+**TerraQuest** — client-side-only real-world RPG. No API routes. All state lives in `localStorage` under key `terraquest_state`.
+
+### Data flow
+
+```
+lib/types.ts       → shared interfaces (GameState, Player, Quest, World, Location)
+lib/game.ts        → pure functions: XP, leveling, quest selection, corruption, persistence
+lib/useLocation.ts → geolocation hook
+components/        → UI components
+app/page.tsx       → single page: orchestrates all game state via useState + useEffect
+```
+
+### Key mechanics
+
+- **World corruption** grows 10% per 5 minutes of inactivity (`updateWorldState`), reduced by quest completion or moving 100m+
+- **XP leveling**: `level = floor(sqrt(xp / 100)) + 1`
+- **Quest types**: `travel` (GPS distance), `photo` (camera), `wait` (return after 5 min away)
+- **Away XP reward**: minutes offline → XP, base capped at 60 min, overtime doubles rate (`calculateReturnReward`)
+- **Quest pool** cycles: completed quest IDs tracked in player state; pool resets when all quests done
+
+### Location simulation (dev/testing)
+
+Pass `?lat=X&lng=Y` query params to bypass real GPS — `useLocation` reads these first. Page auto-detects and shows TEST MODE banner.
+
+### Debug panel
+
+`app/page.tsx` has a hardcoded `if (true)` debug panel with Skip Quest and Reset Game buttons — always visible.
+
+## Stack
+
+Next.js 16, React 19, TypeScript, Tailwind v4 (PostCSS plugin), no external state library.
