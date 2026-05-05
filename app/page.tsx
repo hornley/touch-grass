@@ -69,6 +69,7 @@ export default function Home() {
   const [isTestMode, setIsTestMode] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('home');
+  const [tabFadeKey, setTabFadeKey] = useState(0);
 
   const lastLocation = gameState?.player.lastLocation ?? null;
   const { location, error, isLoading, distanceFromLast } = useLocation(lastLocation, locationEnabled);
@@ -619,7 +620,7 @@ export default function Home() {
               </div>
 
               {/* ── Quest card ─── */}
-              <div className="rune-panel animate-quest" style={{ padding: '20px' }}>
+              <div key={gameState.currentQuest?.id} className="rune-panel animate-quest" style={{ padding: '20px' }}>
                 <SectionHeader
                   label="ACTIVE QUEST"
                   right={questBadge ? (
@@ -726,11 +727,13 @@ export default function Home() {
           </div>
         )}
 
-        {activeTab === 'stats' && <StatsTab gameState={gameState} />}
-        {activeTab === 'achievements' && <AchievementsTab unlockedIds={gameState.player.achievements} />}
+        <div key={tabFadeKey} className="animate-tab-fade">
+          {activeTab === 'stats' && <StatsTab gameState={gameState} />}
+          {activeTab === 'achievements' && <AchievementsTab unlockedIds={gameState.player.achievements} />}
+        </div>
       </main>
 
-      <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
+      <BottomNav activeTab={activeTab} onTabChange={(tab) => { setActiveTab(tab); setTabFadeKey(k => k + 1); }} />
     </div>
   );
 }
