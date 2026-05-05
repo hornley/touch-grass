@@ -9,8 +9,6 @@ import {
   getNextQuest,
   getRandomQuest,
   getQuestXpMultiplier,
-  updateWorldState,
-  reduceCorruption,
   calculateReturnReward,
   updateStreak,
   checkNewAchievements,
@@ -76,7 +74,8 @@ export default function Home() {
   const [tabFadeKey, setTabFadeKey] = useState(0);
 
   const lastLocation = gameState?.player.lastLocation ?? null;
-  const { location, error, isLoading, distanceFromLast } = useLocation(lastLocation, locationEnabled);
+const { location, error, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist } = useLocation(lastLocation, locationEnabled);
+  const distanceFromLast = lastMovementDistance;
   const lastLocationForQuest = (location ?? lastLocation)
     ? { lat: (location ?? lastLocation)!.lat, lng: (location ?? lastLocation)!.lng }
     : null;
@@ -119,13 +118,11 @@ export default function Home() {
 
   useEffect(() => {
     const loaded = loadGameState();
-    const updatedWorld = updateWorldState(loaded.player.lastActive, loaded.world);
     const streakResult = updateStreak(loaded.player.lastStreakDate ?? null, loaded.player.streak ?? 0);
     const streakExtended = streakResult.streak > (loaded.player.streak ?? 0);
 
     const newState: GameState = {
       ...loaded,
-      world: updatedWorld,
       player: {
         ...loaded.player,
         streak: streakResult.streak,
@@ -196,7 +193,17 @@ export default function Home() {
   }, [gameState]);
 
   useEffect(() => {
-    if (!gameState || !location || distanceFromLast === null || distanceFromLast <= 100) return;
+    if (!gameState || !locationEnabled) return;
+
+    if (gameState.currentQuest?.type === 'travel') {
+      if (!isTracking) startTracking();
+    } else {
+      if (isTracking) stopTracking();
+    }
+  }, [gameState?.currentQuest?.type, locationEnabled, isTracking, startTracking, stopTracking]);
+
+  useEffect(() => {
+    if (!gameState || !location || lastMovementDistance <= 0) return;
 
     const quest = gameState.currentQuest;
     const completesTravel = quest?.type === 'travel' && quest.progress + distanceFromLast >= quest.goal;
@@ -208,7 +215,6 @@ export default function Home() {
         const newState: GameState = {
           ...prev,
           player: { ...prev.player, lastLocation: location, lastActive: Date.now(), totalDistance: newDist },
-          world: reduceCorruption(prev.world),
         };
 
         if (prev.currentQuest?.type === 'travel') {
@@ -246,7 +252,6 @@ export default function Home() {
       const newState: GameState = {
         ...gameState,
         player: basePlayer,
-        world: reduceCorruption(gameState.world),
         currentSession: gameState.currentSession
           ? { ...gameState.currentSession, xpEarned: gameState.currentSession.xpEarned + xp, questsCompleted: gameState.currentSession.questsCompleted + 1 }
           : null,
@@ -266,6 +271,7 @@ export default function Home() {
         chainCompleted = true;
         setQuestMessage(`CHAIN COMPLETE  ·  +${bonusXp} XP BONUS`);
         newState.currentQuest = getRandomQuest(newState.player.completedQuests, newState.player.level);
+        stopTracking();
       } else {
         const result = await getNextQuestWithPois(newState.player.completedQuests, newLevel, updatedChain, lastLocationForQuest);
         newState.currentQuest = result.quest;
@@ -283,12 +289,12 @@ export default function Home() {
         setQuestMessage(`QUEST COMPLETE  ·  +${xp} XP`);
       }
       setGameState(newState);
-    };
+     };
 
-    completeTravelQuest();
-  }, [gameState, location, distanceFromLast, getNextQuestWithPois, showAchievementToasts, lastLocationForQuest]);
+     completeTravelQuest();
+   }, [gameState, location, distanceFromLast, getNextQuestWithPois, showAchievementToasts, lastLocationForQuest, stopTracking]);
 
-  const handleStart = () => {
+   const handleStart = () => {
     if (!gameState) return;
     setShowWelcome(false);
     setLocationEnabled(true);
@@ -301,6 +307,13 @@ export default function Home() {
     };
     start();
   };
+
+  // Returning users: enable location automatically so travel quests can track
+  // without needing to re-tap Start every session.
+  useEffect(() => {
+    if (showWelcome !== false) return;
+    if (!locationEnabled) setLocationEnabled(true);
+  }, [showWelcome, locationEnabled]);
 
   const handlePhotoCapture = useCallback(() => {
     if (!gameState?.currentQuest || (gameState.currentQuest.type !== 'photo' && gameState.currentQuest.type !== 'visit')) return;
@@ -356,7 +369,6 @@ export default function Home() {
             : (prev.player.chainCompletions ?? 0),
         },
         currentQuest: nextQuest,
-        world: reduceCorruption(prev.world),
         currentSession: prev.currentSession
           ? { ...prev.currentSession, xpEarned: prev.currentSession.xpEarned + xp, questsCompleted: prev.currentSession.questsCompleted + 1 }
           : null,
@@ -428,7 +440,6 @@ export default function Home() {
             : (prev.player.chainCompletions ?? 0),
         },
         currentQuest: nextQuest,
-        world: reduceCorruption(prev.world),
       };
 
       saveGameState(newState);
@@ -490,7 +501,6 @@ export default function Home() {
             : (prev.player.chainCompletions ?? 0),
         },
         currentQuest: nextQuest,
-        world: reduceCorruption(prev.world),
       };
 
       saveGameState(newState);
@@ -531,7 +541,6 @@ export default function Home() {
   const resetGame = useCallback(() => {
     const initial = loadGameState();
     Object.assign(initial.player, { xp: 0, level: 1, completedQuests: [], streak: 0, lastStreakDate: null, totalDistance: 0, achievements: [], photoQuestsCompleted: 0, currentChain: null, chainCompletions: 0 });
-    Object.assign(initial.world, { corruption: 0, state: 'stable' });
     const reset = async () => {
       const result = await getNextQuestWithPois([], 1, null, lastLocationForQuest);
       initial.currentQuest = result.quest;
@@ -611,9 +620,9 @@ export default function Home() {
             color: '#6a8898', fontSize: '12px', letterSpacing: '1px',
             lineHeight: 1.9, marginBottom: '44px',
           }}>
-            THE REALM GROWS DARK.<br />
-            YOUR FOOTSTEPS ARE ITS ONLY SALVATION.<br />
-            TRAVEL. CAPTURE. RESTORE.
+            YOUR JOURNEY BEGINS NOW.<br />
+            TRAVEL. CAPTURE. EXPLORE.<br />
+            COMPLETE QUESTS TO RANK UP.
           </p>
 
           {/* CTA button */}
@@ -672,18 +681,6 @@ export default function Home() {
   const SEG = 10;
   const filledSegs = Math.floor(Math.max(0, Math.min(1, xpProgress)) * SEG);
 
-  const worldColor = {
-    stable:    { accent: '#2d6e48', bright: '#4ade80', bar: 'linear-gradient(90deg,#1a4a2e,#2d6e48)' },
-    warning:   { accent: '#92400e', bright: '#f59e0b', bar: 'linear-gradient(90deg,#78350f,#f59e0b)' },
-    corrupted: { accent: '#7f1d1d', bright: '#ef4444', bar: 'linear-gradient(90deg,#450a0a,#ef4444)' },
-  }[gameState.world.state];
-
-  const worldLabel = {
-    stable:    '✦ THE REALM HOLDS',
-    warning:   '⚠ DARKNESS SPREADS',
-    corrupted: '☠ THE REALM FALLS',
-  }[gameState.world.state];
-
   const questBadge = gameState.currentQuest && {
     travel: { label: 'TRAVERSE', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.4)' },
     photo:  { label: 'CAPTURE',  color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.4)' },
@@ -728,7 +725,7 @@ export default function Home() {
             borderColor: '#2a1a5a', boxShadow: '0 0 40px rgba(109,40,217,0.2)',
           }}>
             <p style={{ fontFamily: 'var(--font-cinzel)', color: '#7c3aed', letterSpacing: '4px', fontSize: '9px', marginBottom: '16px' }}>
-              THE REALM REMEMBERS YOU
+              WELCOME BACK
             </p>
             <p style={{
               fontFamily: 'var(--font-cinzel)', fontSize: '60px', fontWeight: 900,
@@ -806,9 +803,7 @@ export default function Home() {
                     <span>LVL: <span style={{ color: '#d4a030' }}>{gameState.player.level}</span></span>
                     <span>STREAK: <span style={{ color: '#f59e0b' }}>{gameState.player.streak}</span></span>
                   </div>
-                  <div>
-                    CORRUPTION: <span style={{ color: gameState.world.corruption > 50 ? '#ef4444' : '#4ade80' }}>{gameState.world.corruption}%</span>
-                  </div>
+                  
                 </div>
 
                 {/* Current quest */}
@@ -862,8 +857,19 @@ export default function Home() {
                   })}
                 </div>
 
+                {/* GPS debug info */}
+                <div style={{ fontSize: '10px', color: '#4e6878', marginTop: '10px', padding: '8px', background: '#0d1520', borderRadius: '4px' }}>
+                  <div style={{ marginBottom: '4px', color: '#6a8898' }}>GPS DEBUG:</div>
+                  <div>tracking: <span style={{ color: isTracking ? '#4ade80' : '#ef4444' }}>{isTracking ? 'ON' : 'OFF'}</span></div>
+                  <div>accuracy: <span style={{ color: currentAccuracy && currentAccuracy > 100 ? '#ef4444' : '#4ade80' }}>{currentAccuracy !== null ? `${currentAccuracy.toFixed(0)}m` : 'N/A'}</span></div>
+                  <div>segment: <span style={{ color: currentSegmentDist !== null ? (currentSegmentDist < 5 ? '#ef4444' : '#4ade80') : '#6a8898' }}>{currentSegmentDist !== null ? `${currentSegmentDist.toFixed(1)}m` : 'N/A'}</span></div>
+                  <div>speed: <span style={{ color: currentSpeed !== null ? (currentSpeed > 10 ? '#ef4444' : '#4ade80') : '#6a8898' }}>{currentSpeed !== null ? `${currentSpeed.toFixed(1)}m/s` : 'N/A'}</span></div>
+                  <div>cumulative: <span style={{ color: '#d4a030' }}>{cumulativeDistance.toFixed(1)} m</span></div>
+                  <div>lastMovement: <span style={{ color: '#d4a030' }}>{lastMovementDistance.toFixed(1)} m</span></div>
+                </div>
+
                 {/* Actions */}
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
                   <button onClick={skipQuest} style={{ fontSize: '10px', color: '#93c5fd', background: 'none', border: '1px solid #1e3a5f', padding: '4px 12px', cursor: 'pointer', fontFamily: 'var(--font-cinzel)' }}>
                     SKIP QUEST
                   </button>
@@ -906,38 +912,6 @@ export default function Home() {
                       🔥 {gameState.player.streak}D
                     </span>
                   )}
-                </div>
-              </div>
-
-              {/* ── World state card ─── */}
-              <div
-                className={`rune-panel${gameState.world.state === 'corrupted' ? ' animate-corrupt' : ''}`}
-                style={{
-                  padding: '20px',
-                  borderColor: worldColor.accent,
-                }}
-              >
-                <SectionHeader label="THE REALM" right={
-                  <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '1px', color: worldColor.bright, whiteSpace: 'nowrap' }}>
-                    {worldLabel}
-                  </span>
-                } />
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ flex: 1, height: '6px', background: '#172030', border: '1px solid #2a3d52', overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%',
-                      width: `${gameState.world.corruption}%`,
-                      background: worldColor.bar,
-                      transition: 'width 0.6s ease',
-                    }} />
-                  </div>
-                  <span style={{
-                    fontFamily: 'var(--font-cinzel)', fontSize: '12px',
-                    color: worldColor.bright, minWidth: '36px', textAlign: 'right',
-                  }}>
-                    {gameState.world.corruption}%
-                  </span>
                 </div>
               </div>
 
@@ -1082,16 +1056,27 @@ export default function Home() {
               {/* ── Location card ─── */}
               <div className="rune-panel" style={{ padding: '16px 20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px', color: '#7a9aac' }}>
-                    COORDINATES
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px', color: '#7a9aac' }}>
+                      COORDINATES
+                    </span>
+                    {isTracking && (
+                      <span style={{
+                        fontFamily: 'var(--font-cinzel)', fontSize: '8px', letterSpacing: '2px',
+                        color: '#4ade80', background: 'rgba(74,222,128,0.1)',
+                        border: '1px solid rgba(74,222,128,0.4)', padding: '2px 8px',
+                      }}>
+                        ● GPS ACTIVE
+                      </span>
+                    )}
+                  </div>
                   {location && (
                     <span style={{ fontFamily: 'var(--font-inconsolata, monospace)', fontSize: '12px', color: '#85a885' }}>
                       {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
                     </span>
                   )}
                 </div>
-                {(isLoading || error || distanceFromLast !== null || !location) && (
+                {(isLoading || error || !location) && (
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: '8px',
                     marginTop: '8px', padding: '8px 0',
@@ -1106,13 +1091,15 @@ export default function Home() {
                         <span style={{ fontSize: '14px', color: '#ef4444' }}>⚠</span>
                         <span style={{ fontSize: '11px', color: '#ef4444', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>{error.toUpperCase()}</span>
                       </>
-                    ) : distanceFromLast !== null ? (
+                    ) : location ? (
                       <>
-                        <span style={{ fontSize: '14px', color: distanceFromLast > 100 ? '#85a885' : '#4e6878' }}>
-                          {distanceFromLast > 100 ? '✦' : '◦'}
-                        </span>
+                        {isTracking && (
+                          <span style={{ fontSize: '14px', color: '#4ade80', marginRight: '6px' }}>●</span>
+                        )}
                         <span style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px' }}>
-                          {Math.round(distanceFromLast)} M FROM LAST POSITION
+                          {isTracking && cumulativeDistance > 0
+                            ? `TRACKING: ${Math.round(cumulativeDistance)} M`
+                            : location.lat.toFixed(5) + ', ' + location.lng.toFixed(5)}
                         </span>
                       </>
                     ) : (
@@ -1121,6 +1108,23 @@ export default function Home() {
                         <span style={{ fontSize: '11px', color: '#4e6878', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>AWAITING SIGNAL</span>
                       </>
                     )}
+                  </div>
+                )}
+
+                {/* Normal state: still show tracking distance if active */}
+                {!isLoading && !error && location && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    marginTop: '8px', padding: '8px 0',
+                  }}>
+                    {isTracking && (
+                      <span style={{ fontSize: '14px', color: '#4ade80', marginRight: '6px' }}>●</span>
+                    )}
+                    <span style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px' }}>
+                      {isTracking
+                        ? `TRACKING: ${Math.round(cumulativeDistance)} M`
+                        : location.lat.toFixed(5) + ', ' + location.lng.toFixed(5)}
+                    </span>
                   </div>
                 )}
               </div>

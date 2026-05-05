@@ -18,7 +18,7 @@ const inconsolata = Inconsolata({
 
 export const metadata: Metadata = {
   title: "TerraQuest",
-  description: "A real-world RPG — your footsteps heal the realm.",
+  description: "A real-world RPG — complete quests by traveling, capturing, and exploring.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
