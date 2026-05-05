@@ -6,6 +6,7 @@ import {
   saveGameState,
   calculateLevel,
   getXpForNextLevel,
+  getNextQuest,
   getRandomQuest,
   getQuestXpMultiplier,
   updateWorldState,
@@ -15,6 +16,8 @@ import {
   checkNewAchievements,
   QUEST_POOL,
   ACHIEVEMENTS,
+  calculateDistance,
+  fetchNearbyPois,
 } from '@/lib/game';
 import { useLocation } from '@/lib/useLocation';
 import { CameraCapture } from '@/components/CameraCapture';
@@ -68,11 +71,46 @@ export default function Home() {
   const [achievementToast, setAchievementToast] = useState<string | null>(null);
   const [isTestMode, setIsTestMode] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
+  const [visitCapturePending, setVisitCapturePending] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [tabFadeKey, setTabFadeKey] = useState(0);
 
   const lastLocation = gameState?.player.lastLocation ?? null;
   const { location, error, isLoading, distanceFromLast } = useLocation(lastLocation, locationEnabled);
+  const lastLocationForQuest = (location ?? lastLocation)
+    ? { lat: (location ?? lastLocation)!.lat, lng: (location ?? lastLocation)!.lng }
+    : null;
+
+  const getNextQuestWithPois = useCallback(async (
+    completedIds: string[],
+    level: number,
+    chain: GameState['player']['currentChain'],
+    currentLocation: { lat: number; lng: number } | null,
+  ) => {
+    const pois = currentLocation ? await fetchNearbyPois(currentLocation.lat, currentLocation.lng) : [];
+    return getNextQuest(completedIds, level, chain, currentLocation, pois);
+  }, []);
+
+  useEffect(() => {
+    if (!gameState?.currentQuest || gameState.currentQuest.type !== 'visit') {
+      setVisitCapturePending(false);
+      return;
+    }
+
+    if (!location || !gameState.currentQuest.targetLat || !gameState.currentQuest.targetLng) {
+      setVisitCapturePending(false);
+      return;
+    }
+
+    const distance = calculateDistance(
+      location.lat,
+      location.lng,
+      gameState.currentQuest.targetLat,
+      gameState.currentQuest.targetLng,
+    );
+
+    setVisitCapturePending(distance <= (gameState.currentQuest.radiusM ?? 50));
+  }, [gameState, location]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -95,6 +133,8 @@ export default function Home() {
         totalDistance: loaded.player.totalDistance ?? 0,
         achievements: loaded.player.achievements ?? [],
         photoQuestsCompleted: loaded.player.photoQuestsCompleted ?? 0,
+        currentChain: loaded.player.currentChain ?? null,
+        chainCompletions: loaded.player.chainCompletions ?? 0,
       },
       sessions: loaded.sessions ?? [],
       currentSession: { startTime: Date.now(), xpEarned: 0, questsCompleted: 0 },
@@ -158,128 +198,351 @@ export default function Home() {
   useEffect(() => {
     if (!gameState || !location || distanceFromLast === null || distanceFromLast <= 100) return;
 
-    setGameState(prev => {
-      if (!prev) return prev;
-      const newDist = (prev.player.totalDistance ?? 0) + distanceFromLast;
-      const newState: GameState = {
-        ...prev,
-        player: { ...prev.player, lastLocation: location, lastActive: Date.now(), totalDistance: newDist },
-        world: reduceCorruption(prev.world),
-      };
+    const quest = gameState.currentQuest;
+    const completesTravel = quest?.type === 'travel' && quest.progress + distanceFromLast >= quest.goal;
 
-      if (prev.currentQuest?.type === 'travel') {
-        const progress = prev.currentQuest.progress + distanceFromLast;
-        if (progress >= prev.currentQuest.goal) {
-          const xp = Math.round(prev.currentQuest.xpReward * getQuestXpMultiplier(prev.player.level));
-          const newXp = prev.player.xp + xp;
-          const newLevel = calculateLevel(newXp);
-          setQuestMessage(`QUEST COMPLETE  ·  +${xp} XP`);
-          newState.player = { ...newState.player, xp: newXp, level: newLevel, completedQuests: [...newState.player.completedQuests, prev.currentQuest.id] };
-          newState.currentQuest = getRandomQuest(newState.player.completedQuests, newLevel);
-          if (newState.currentSession) newState.currentSession = { ...newState.currentSession, xpEarned: newState.currentSession.xpEarned + xp, questsCompleted: newState.currentSession.questsCompleted + 1 };
-        } else {
+    if (!completesTravel) {
+      setGameState(prev => {
+        if (!prev) return prev;
+        const newDist = (prev.player.totalDistance ?? 0) + distanceFromLast;
+        const newState: GameState = {
+          ...prev,
+          player: { ...prev.player, lastLocation: location, lastActive: Date.now(), totalDistance: newDist },
+          world: reduceCorruption(prev.world),
+        };
+
+        if (prev.currentQuest?.type === 'travel') {
+          const progress = prev.currentQuest.progress + distanceFromLast;
           newState.currentQuest = { ...prev.currentQuest, progress };
         }
+
+        saveGameState(newState);
+        return newState;
+      });
+      return;
+    }
+
+    const completeTravelQuest = async () => {
+      const newDist = (gameState.player.totalDistance ?? 0) + distanceFromLast;
+      const chainMultiplier = gameState.player.currentChain?.multiplier ?? 1;
+      const xp = Math.round(quest.xpReward * getQuestXpMultiplier(gameState.player.level) * chainMultiplier);
+      const newXp = gameState.player.xp + xp;
+      const newLevel = calculateLevel(newXp);
+      const updatedChain = gameState.player.currentChain
+        ? { ...gameState.player.currentChain, stepIndex: gameState.player.currentChain.stepIndex + 1, xpEarned: gameState.player.currentChain.xpEarned + xp }
+        : null;
+
+      const basePlayer = {
+        ...gameState.player,
+        xp: newXp,
+        level: newLevel,
+        completedQuests: [...gameState.player.completedQuests, quest.id],
+        currentChain: updatedChain,
+        lastLocation: location,
+        lastActive: Date.now(),
+        totalDistance: newDist,
+      };
+
+      const newState: GameState = {
+        ...gameState,
+        player: basePlayer,
+        world: reduceCorruption(gameState.world),
+        currentSession: gameState.currentSession
+          ? { ...gameState.currentSession, xpEarned: gameState.currentSession.xpEarned + xp, questsCompleted: gameState.currentSession.questsCompleted + 1 }
+          : null,
+      };
+
+      let chainCompleted = false;
+      if (updatedChain && updatedChain.stepIndex >= updatedChain.totalSteps) {
+        const bonusXp = Math.round(updatedChain.xpEarned * 0.3);
+        const bonusTotal = newXp + bonusXp;
+        newState.player = {
+          ...newState.player,
+          xp: bonusTotal,
+          level: calculateLevel(bonusTotal),
+          currentChain: null,
+          chainCompletions: (newState.player.chainCompletions ?? 0) + 1,
+        };
+        chainCompleted = true;
+        setQuestMessage(`CHAIN COMPLETE  ·  +${bonusXp} XP BONUS`);
+        newState.currentQuest = getRandomQuest(newState.player.completedQuests, newState.player.level);
       } else {
-        newState.currentQuest = getRandomQuest(prev.player.completedQuests, prev.player.level);
+        const result = await getNextQuestWithPois(newState.player.completedQuests, newLevel, updatedChain, lastLocationForQuest);
+        newState.currentQuest = result.quest;
+        newState.player.currentChain = result.chain;
       }
 
       const unlocked = checkNewAchievements(newState);
-      if (unlocked.length) { newState.player = { ...newState.player, achievements: [...newState.player.achievements, ...unlocked] }; showAchievementToasts(unlocked); }
-      saveGameState(newState); return newState;
-    });
-  }, [location, distanceFromLast]); // eslint-disable-line react-hooks/exhaustive-deps
+      if (unlocked.length) {
+        newState.player = { ...newState.player, achievements: [...newState.player.achievements, ...unlocked] };
+        showAchievementToasts(unlocked);
+      }
+
+      saveGameState(newState);
+      if (!chainCompleted) {
+        setQuestMessage(`QUEST COMPLETE  ·  +${xp} XP`);
+      }
+      setGameState(newState);
+    };
+
+    completeTravelQuest();
+  }, [gameState, location, distanceFromLast, getNextQuestWithPois, showAchievementToasts, lastLocationForQuest]);
 
   const handleStart = () => {
     if (!gameState) return;
     setShowWelcome(false);
     setLocationEnabled(true);
-    setGameState(prev => {
-      if (!prev) return prev;
-      const s = { ...prev, currentQuest: getRandomQuest(prev.player.completedQuests, prev.player.level) };
-      saveGameState(s); return s;
-    });
+    const start = async () => {
+      if (!gameState) return;
+      const result = await getNextQuestWithPois(gameState.player.completedQuests, gameState.player.level, gameState.player.currentChain, lastLocationForQuest);
+      const s = { ...gameState, currentQuest: result.quest, player: { ...gameState.player, currentChain: result.chain } };
+      saveGameState(s);
+      setGameState(s);
+    };
+    start();
   };
 
   const handlePhotoCapture = useCallback(() => {
-    if (!gameState?.currentQuest || gameState.currentQuest.type !== 'photo') return;
-    setGameState(prev => {
-      if (!prev || !prev.currentQuest || prev.currentQuest.type !== 'photo') return prev;
-      const xp = Math.round(prev.currentQuest.xpReward * getQuestXpMultiplier(prev.player.level));
+    if (!gameState?.currentQuest || (gameState.currentQuest.type !== 'photo' && gameState.currentQuest.type !== 'visit')) return;
+    if (gameState.currentQuest.type === 'visit' && !visitCapturePending) return;
+
+    const finalize = async () => {
+      const prev = gameState;
+      if (!prev.currentQuest || (prev.currentQuest.type !== 'photo' && prev.currentQuest.type !== 'visit')) return;
+      if (prev.currentQuest.type === 'visit' && !visitCapturePending) return;
+
+      const chainMultiplier = prev.player.currentChain?.multiplier ?? 1;
+      const xp = Math.round(prev.currentQuest.xpReward * getQuestXpMultiplier(prev.player.level) * chainMultiplier);
       const newXp = prev.player.xp + xp;
-      const newLevel = calculateLevel(newXp);
-      setQuestMessage(`CAPTURED  ·  +${xp} XP`);
+      let newLevel = calculateLevel(newXp);
+      let chainBonus = 0;
       const completedIds = [...prev.player.completedQuests, prev.currentQuest.id];
+      const updatedChain = prev.player.currentChain
+        ? { ...prev.player.currentChain, stepIndex: prev.player.currentChain.stepIndex + 1, xpEarned: prev.player.currentChain.xpEarned + xp }
+        : null;
+
+      let nextQuest = getRandomQuest(completedIds, newLevel);
+      let nextChain = updatedChain;
+      let chainCompleted = false;
+
+      if (updatedChain) {
+        if (updatedChain.stepIndex >= updatedChain.totalSteps) {
+          const bonusXp = Math.round(updatedChain.xpEarned * 0.3);
+          chainBonus = bonusXp;
+          const bonusTotal = newXp + bonusXp;
+          setQuestMessage(`CHAIN COMPLETE  ·  +${bonusXp} XP BONUS`);
+          newLevel = calculateLevel(bonusTotal);
+          nextQuest = getRandomQuest(completedIds, newLevel);
+          nextChain = null;
+          chainCompleted = true;
+        } else {
+          const result = await getNextQuestWithPois(completedIds, newLevel, updatedChain, lastLocationForQuest);
+          nextQuest = result.quest;
+          nextChain = result.chain;
+        }
+      }
+
       const newState: GameState = {
         ...prev,
-        player: { ...prev.player, xp: newXp, level: newLevel, completedQuests: completedIds, photoQuestsCompleted: (prev.player.photoQuestsCompleted ?? 0) + 1 },
-        currentQuest: getRandomQuest(completedIds, newLevel),
+        player: {
+          ...prev.player,
+          xp: newXp + chainBonus,
+          level: newLevel,
+          completedQuests: completedIds,
+          photoQuestsCompleted: (prev.player.photoQuestsCompleted ?? 0) + (prev.currentQuest.type === 'photo' ? 1 : 0),
+          currentChain: nextChain,
+          chainCompletions: chainCompleted
+            ? (prev.player.chainCompletions ?? 0) + 1
+            : (prev.player.chainCompletions ?? 0),
+        },
+        currentQuest: nextQuest,
         world: reduceCorruption(prev.world),
-        currentSession: prev.currentSession ? { ...prev.currentSession, xpEarned: prev.currentSession.xpEarned + xp, questsCompleted: prev.currentSession.questsCompleted + 1 } : null,
+        currentSession: prev.currentSession
+          ? { ...prev.currentSession, xpEarned: prev.currentSession.xpEarned + xp, questsCompleted: prev.currentSession.questsCompleted + 1 }
+          : null,
       };
+
       const unlocked = checkNewAchievements(newState);
-      if (unlocked.length) { newState.player = { ...newState.player, achievements: [...newState.player.achievements, ...unlocked] }; showAchievementToasts(unlocked); }
-      saveGameState(newState); return newState;
-    });
-  }, [gameState, showAchievementToasts]);
+      if (unlocked.length) {
+        newState.player = { ...newState.player, achievements: [...newState.player.achievements, ...unlocked] };
+        showAchievementToasts(unlocked);
+      }
+
+      saveGameState(newState);
+      if (!chainCompleted) {
+        setQuestMessage(`${prev.currentQuest.type === 'visit' ? 'VISITED' : 'CAPTURED'}  ·  +${xp} XP`);
+      }
+      setGameState(newState);
+      setVisitCapturePending(false);
+    };
+
+    finalize();
+  }, [gameState, showAchievementToasts, visitCapturePending, getNextQuestWithPois, lastLocationForQuest]);
 
   const handleMeditateComplete = useCallback(() => {
     if (!gameState?.currentQuest || gameState.currentQuest.type !== 'meditate') return;
-    setGameState(prev => {
-      if (!prev || !prev.currentQuest || prev.currentQuest.type !== 'meditate') return prev;
-      const xp = Math.round(prev.currentQuest.xpReward * getQuestXpMultiplier(prev.player.level));
+    const finalize = async () => {
+      const prev = gameState;
+      if (!prev.currentQuest || prev.currentQuest.type !== 'meditate') return;
+      const chainMultiplier = prev.player.currentChain?.multiplier ?? 1;
+      const xp = Math.round(prev.currentQuest.xpReward * getQuestXpMultiplier(prev.player.level) * chainMultiplier);
       const newXp = prev.player.xp + xp;
-      const newLevel = calculateLevel(newXp);
-      setQuestMessage(`CENTERED  ·  +${xp} XP`);
+      let newLevel = calculateLevel(newXp);
+      let chainBonus = 0;
       const completedIds = [...prev.player.completedQuests, prev.currentQuest.id];
+      const updatedChain = prev.player.currentChain
+        ? { ...prev.player.currentChain, stepIndex: prev.player.currentChain.stepIndex + 1, xpEarned: prev.player.currentChain.xpEarned + xp }
+        : null;
+
+      let nextQuest = getRandomQuest(completedIds, newLevel);
+      let nextChain = updatedChain;
+      let chainCompleted = false;
+
+      if (updatedChain) {
+        if (updatedChain.stepIndex >= updatedChain.totalSteps) {
+          const bonusXp = Math.round(updatedChain.xpEarned * 0.3);
+          chainBonus = bonusXp;
+          const bonusTotal = newXp + bonusXp;
+          setQuestMessage(`CHAIN COMPLETE  ·  +${bonusXp} XP BONUS`);
+          newLevel = calculateLevel(bonusTotal);
+          nextQuest = getRandomQuest(completedIds, newLevel);
+          nextChain = null;
+          chainCompleted = true;
+        } else {
+          const result = await getNextQuestWithPois(completedIds, newLevel, updatedChain, lastLocationForQuest);
+          nextQuest = result.quest;
+          nextChain = result.chain;
+        }
+      }
+
       const newState: GameState = {
         ...prev,
-        player: { ...prev.player, xp: newXp, level: newLevel, completedQuests: completedIds },
-        currentQuest: getRandomQuest(completedIds, newLevel),
+        player: {
+          ...prev.player,
+          xp: newXp + chainBonus,
+          level: newLevel,
+          completedQuests: completedIds,
+          currentChain: nextChain,
+          chainCompletions: chainCompleted
+            ? (prev.player.chainCompletions ?? 0) + 1
+            : (prev.player.chainCompletions ?? 0),
+        },
+        currentQuest: nextQuest,
         world: reduceCorruption(prev.world),
       };
-      saveGameState(newState); return newState;
-    });
-  }, [gameState]);
+
+      saveGameState(newState);
+      if (!chainCompleted) {
+        setQuestMessage(`CENTERED  ·  +${xp} XP`);
+      }
+      setGameState(newState);
+    };
+
+    finalize();
+  }, [gameState, getNextQuestWithPois, lastLocationForQuest]);
 
   const handleObjectComplete = useCallback(() => {
     if (!gameState?.currentQuest || gameState.currentQuest.type !== 'object') return;
-    setGameState(prev => {
-      if (!prev || !prev.currentQuest || prev.currentQuest.type !== 'object') return prev;
-      const xp = Math.round(prev.currentQuest.xpReward * getQuestXpMultiplier(prev.player.level));
+    const finalize = async () => {
+      const prev = gameState;
+      if (!prev.currentQuest || prev.currentQuest.type !== 'object') return;
+      const chainMultiplier = prev.player.currentChain?.multiplier ?? 1;
+      const xp = Math.round(prev.currentQuest.xpReward * getQuestXpMultiplier(prev.player.level) * chainMultiplier);
       const newXp = prev.player.xp + xp;
-      const newLevel = calculateLevel(newXp);
-      setQuestMessage(`DISCOVERED  ·  +${xp} XP`);
+      let newLevel = calculateLevel(newXp);
+      let chainBonus = 0;
       const completedIds = [...prev.player.completedQuests, prev.currentQuest.id];
+      const updatedChain = prev.player.currentChain
+        ? { ...prev.player.currentChain, stepIndex: prev.player.currentChain.stepIndex + 1, xpEarned: prev.player.currentChain.xpEarned + xp }
+        : null;
+
+      let nextQuest = getRandomQuest(completedIds, newLevel);
+      let nextChain = updatedChain;
+      let chainCompleted = false;
+
+      if (updatedChain) {
+        if (updatedChain.stepIndex >= updatedChain.totalSteps) {
+          const bonusXp = Math.round(updatedChain.xpEarned * 0.3);
+          chainBonus = bonusXp;
+          const bonusTotal = newXp + bonusXp;
+          setQuestMessage(`CHAIN COMPLETE  ·  +${bonusXp} XP BONUS`);
+          newLevel = calculateLevel(bonusTotal);
+          nextQuest = getRandomQuest(completedIds, newLevel);
+          nextChain = null;
+          chainCompleted = true;
+        } else {
+          const result = await getNextQuestWithPois(completedIds, newLevel, updatedChain, lastLocationForQuest);
+          nextQuest = result.quest;
+          nextChain = result.chain;
+        }
+      }
+
       const newState: GameState = {
         ...prev,
-        player: { ...prev.player, xp: newXp, level: newLevel, completedQuests: completedIds },
-        currentQuest: getRandomQuest(completedIds, newLevel),
+        player: {
+          ...prev.player,
+          xp: newXp + chainBonus,
+          level: newLevel,
+          completedQuests: completedIds,
+          currentChain: nextChain,
+          chainCompletions: chainCompleted
+            ? (prev.player.chainCompletions ?? 0) + 1
+            : (prev.player.chainCompletions ?? 0),
+        },
+        currentQuest: nextQuest,
         world: reduceCorruption(prev.world),
       };
-      saveGameState(newState); return newState;
-    });
-  }, [gameState]);
+
+      saveGameState(newState);
+      if (!chainCompleted) {
+        setQuestMessage(`DISCOVERED  ·  +${xp} XP`);
+      }
+      setGameState(newState);
+    };
+
+    finalize();
+  }, [gameState, getNextQuestWithPois, lastLocationForQuest]);
 
   const skipQuest = useCallback(() => {
     if (!gameState?.currentQuest) return;
-    setGameState(prev => {
-      if (!prev || !prev.currentQuest) return prev;
-      const s = { ...prev, currentQuest: getRandomQuest(prev.player.completedQuests, prev.player.level) };
-      saveGameState(s); return s;
-    });
-  }, [gameState]);
+    const skip = async () => {
+      if (!gameState || !gameState.currentQuest) return;
+      const result = await getNextQuestWithPois(gameState.player.completedQuests, gameState.player.level, gameState.player.currentChain, lastLocationForQuest);
+      const s = { ...gameState, currentQuest: result.quest, player: { ...gameState.player, currentChain: result.chain } };
+      saveGameState(s);
+      setGameState(s);
+    };
+    skip();
+  }, [gameState, lastLocationForQuest, getNextQuestWithPois]);
+
+  const exitChain = useCallback(() => {
+    if (!gameState) return;
+    const exit = async () => {
+      if (!gameState) return;
+      const cleared = { ...gameState, player: { ...gameState.player, currentChain: null } };
+      const result = await getNextQuestWithPois(cleared.player.completedQuests, cleared.player.level, null, lastLocationForQuest);
+      const s = { ...cleared, currentQuest: result.quest, player: { ...cleared.player, currentChain: result.chain } };
+      saveGameState(s);
+      setGameState(s);
+    };
+    exit();
+  }, [gameState, lastLocationForQuest, getNextQuestWithPois]);
 
   const resetGame = useCallback(() => {
     const initial = loadGameState();
-    Object.assign(initial.player, { xp: 0, level: 1, completedQuests: [], streak: 0, lastStreakDate: null, totalDistance: 0, achievements: [], photoQuestsCompleted: 0 });
+    Object.assign(initial.player, { xp: 0, level: 1, completedQuests: [], streak: 0, lastStreakDate: null, totalDistance: 0, achievements: [], photoQuestsCompleted: 0, currentChain: null, chainCompletions: 0 });
     Object.assign(initial.world, { corruption: 0, state: 'stable' });
-    initial.currentQuest = getRandomQuest([], 1);
-    initial.sessions = [];
-    initial.currentSession = { startTime: Date.now(), xpEarned: 0, questsCompleted: 0 };
-    saveGameState(initial);
-    setGameState(initial);
-  }, []);
+    const reset = async () => {
+      const result = await getNextQuestWithPois([], 1, null, lastLocationForQuest);
+      initial.currentQuest = result.quest;
+      initial.player.currentChain = result.chain;
+      initial.sessions = [];
+      initial.currentSession = { startTime: Date.now(), xpEarned: 0, questsCompleted: 0 };
+      saveGameState(initial);
+      setGameState(initial);
+    };
+    reset();
+  }, [getNextQuestWithPois, lastLocationForQuest]);
 
   // ── Loading ────────────────────────────────────────────────
   if (!gameState || showWelcome === null) {
@@ -427,6 +690,7 @@ export default function Home() {
     wait:   { label: 'MEDITATE', color: '#06b6d4', bg: 'rgba(6,182,212,0.1)',  border: 'rgba(6,182,212,0.4)' },
     meditate:{ label: 'YOGA',    color: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.4)' },
     object: { label: 'FIND',    color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.4)' },
+    visit: { label: 'VISIT',    color: '#ec4899', bg: 'rgba(236,72,153,0.1)', border: 'rgba(236,72,153,0.4)' },
   }[gameState.currentQuest.type];
 
   // ── Main game render ────────────────────────────────────────
@@ -555,6 +819,12 @@ export default function Home() {
                     <span style={{ color: '#ef4444' }}>NONE</span>
                   )}
                 </div>
+
+                {gameState.player.currentChain && (
+                  <div style={{ fontSize: '9px', color: '#c4b5fd', marginBottom: '10px' }}>
+                    CHAIN: {gameState.player.currentChain.id} ({gameState.player.currentChain.stepIndex + 1}/{gameState.player.currentChain.totalSteps})
+                  </div>
+                )}
 
                 {/* Quest pool */}
                 <div style={{ fontSize: '9px', color: '#4e6878', marginBottom: '10px' }}>
@@ -687,6 +957,25 @@ export default function Home() {
                   ) : undefined}
                 />
 
+                {gameState.player.currentChain && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                    <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '9px', letterSpacing: '2px', color: '#c4b5fd' }}>
+                      CHAIN {Math.min(gameState.player.currentChain.stepIndex + 1, gameState.player.currentChain.totalSteps)} / {gameState.player.currentChain.totalSteps}
+                    </span>
+                    <button
+                      onClick={exitChain}
+                      style={{
+                        fontSize: '9px', letterSpacing: '2px',
+                        color: '#fca5a5', background: 'none',
+                        border: '1px solid #5f1e1e', padding: '2px 8px', cursor: 'pointer',
+                        fontFamily: 'var(--font-cinzel)',
+                      }}
+                    >
+                      EXIT CHAIN
+                    </button>
+                  </div>
+                )}
+
                 {gameState.currentQuest ? (
                   <div>
                     <p style={{
@@ -746,6 +1035,30 @@ export default function Home() {
                         targetObject={gameState.currentQuest.targetObject || 'tree'}
                         onComplete={handleObjectComplete}
                       />
+                    )}
+
+                    {gameState.currentQuest.type === 'visit' && (
+                      <div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                          <span style={{ fontSize: '10px', color: visitCapturePending ? '#4ade80' : '#f59e0b', letterSpacing: '1px' }}>
+                            {visitCapturePending ? 'IN RANGE' : 'MOVE CLOSER'}
+                          </span>
+                          <div style={{ flex: 1, height: '4px', background: '#172030', border: '1px solid #2a3d52', overflow: 'hidden' }}>
+                            <div style={{
+                              height: '100%',
+                              width: visitCapturePending ? '100%' : '35%',
+                              background: visitCapturePending ? 'linear-gradient(90deg,#16a34a,#4ade80)' : 'linear-gradient(90deg,#f59e0b,#fbbf24)',
+                              transition: 'width 0.4s ease',
+                            }} />
+                          </div>
+                        </div>
+                        <p style={{ fontSize: '11px', color: '#9d174d', letterSpacing: '1px', marginBottom: '10px' }}>
+                          {gameState.currentQuest.isCryptic
+                            ? 'A nearby location calls to you. Find it within 50 meters and capture proof.'
+                            : `Travel within ${gameState.currentQuest.radiusM ?? 50}m of ${gameState.currentQuest.targetName || 'the target'}, then take a photo.`}
+                        </p>
+                        <CameraCapture onCapture={handlePhotoCapture} disabled={!visitCapturePending} />
+                      </div>
                     )}
                   </div>
                 ) : (

@@ -15,11 +15,13 @@ export interface Player {
   totalDistance: number;
   achievements: string[];
   photoQuestsCompleted: number;
+  currentChain: ChainState | null;
+  chainCompletions: number;
 }
 
 export interface Quest {
   id: string;
-  type: 'travel' | 'photo' | 'wait' | 'meditate' | 'object';
+  type: 'travel' | 'photo' | 'wait' | 'meditate' | 'object' | 'visit';
   status: 'active' | 'completed';
   progress: number;
   goal: number;
@@ -27,6 +29,20 @@ export interface Quest {
   description: string;
   minLevel?: number;
   targetObject?: string;
+  targetName?: string;
+  targetLat?: number;
+  targetLng?: number;
+  radiusM?: number;
+  isCryptic?: boolean;
+}
+
+export interface ChainState {
+  id: string;
+  stepIndex: number;
+  totalSteps: number;
+  type: 'fixed' | 'dynamic';
+  multiplier: number;
+  xpEarned: number;
 }
 
 export type WorldState = 'stable' | 'warning' | 'corrupted';

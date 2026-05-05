@@ -1,4 +1,4 @@
-import { GameState, Quest, World, WorldState } from './types';
+import { ChainState, GameState, Quest, World, WorldState } from './types';
 
 const STORAGE_KEY = 'terraquest_state';
 
@@ -12,6 +12,7 @@ export const ACHIEVEMENTS = [
   { id: 'streak_7',        name: 'Dedicated',    icon: '⚡', description: '7-day streak' },
   { id: 'level_5',         name: 'Veteran',      icon: '⭐', description: 'Reach level 5' },
   { id: 'guardian',        name: 'Guardian',     icon: '🛡️', description: 'Reduce world corruption to 0%' },
+  { id: 'chain_first',     name: 'Linked Fate',  icon: '⛓️', description: 'Complete your first quest chain' },
 ];
 
 export const QUEST_POOL: Omit<Quest, 'status' | 'progress'>[] = [
@@ -26,6 +27,240 @@ export const QUEST_POOL: Omit<Quest, 'status' | 'progress'>[] = [
   { id: 'quest_15', type: 'object', goal: 1, xpReward: 25, description: 'Find a cat or dog', targetObject: 'cat' },
 ];
 
+export type QuestTemplate = Omit<Quest, 'status' | 'progress' | 'id'> & {
+  templateId: string;
+  requiresPoi?: boolean;
+};
+
+export interface ChainTemplate {
+  id: string;
+  type: 'fixed' | 'dynamic';
+  steps: QuestTemplate[];
+}
+
+const CHAIN_TEMPLATES: ChainTemplate[] = [
+  {
+    id: 'chain_explore_1',
+    type: 'fixed',
+    steps: [
+      { templateId: 'travel_100', type: 'travel', goal: 100, xpReward: 20, description: 'Walk 100 meters to attune your compass' },
+      { templateId: 'visit_poi', type: 'visit', goal: 1, xpReward: 30, description: 'Visit %POI% and take a photo', requiresPoi: true },
+      { templateId: 'photo_chain', type: 'photo', goal: 1, xpReward: 25, description: 'Capture a moment from your journey' },
+    ],
+  },
+  {
+    id: 'chain_explore_2',
+    type: 'fixed',
+    steps: [
+      { templateId: 'visit_poi', type: 'visit', goal: 1, xpReward: 30, description: 'Travel to %POI% and capture proof', requiresPoi: true },
+      { templateId: 'object_tree', type: 'object', goal: 1, xpReward: 25, description: 'Find a tree or plant nearby', targetObject: 'tree' },
+    ],
+  },
+  {
+    id: 'chain_explore_3',
+    type: 'fixed',
+    steps: [
+      { templateId: 'travel_500', type: 'travel', goal: 500, xpReward: 30, description: 'Walk 500 meters to reach the next site' },
+      { templateId: 'visit_poi', type: 'visit', goal: 1, xpReward: 35, description: 'Find %POI% and take a photo', requiresPoi: true },
+      { templateId: 'object_book', type: 'object', goal: 1, xpReward: 25, description: 'Seek a book or journal', targetObject: 'book' },
+    ],
+  },
+];
+
+const VISIT_RADIUS_M = 50;
+const POI_CACHE_MINUTES = 10;
+
+export type PoiResult = {
+  name: string;
+  lat: number;
+  lng: number;
+  tags: Record<string, string>;
+};
+
+type CachedPois = {
+  timestamp: number;
+  items: PoiResult[];
+};
+
+const POI_TAG_WHITELIST = [
+  'tourism',
+  'historic',
+  'leisure',
+  'amenity',
+  'shop',
+  'natural',
+];
+
+const POI_TAG_BLACKLIST: Array<[string, string]> = [
+  ['building', 'residential'],
+  ['building', 'house'],
+  ['building', 'apartments'],
+];
+
+function getPoiCacheKey(lat: number, lng: number, radius: number): string {
+  const roundedLat = Math.round(lat * 1000) / 1000;
+  const roundedLng = Math.round(lng * 1000) / 1000;
+  return `terraquest_pois_${roundedLat}_${roundedLng}_${radius}`;
+}
+
+function isPoiAllowed(tags: Record<string, string>): boolean {
+  if (!tags?.name) return false;
+  if (Object.keys(tags).some(key => key.startsWith('addr:'))) return false;
+  for (const [key, value] of POI_TAG_BLACKLIST) {
+    if (tags[key] === value) return false;
+  }
+  return POI_TAG_WHITELIST.some(key => Boolean(tags[key]));
+}
+
+function formatPoiResults(elements: Array<{ tags?: Record<string, string>; lat?: number; lon?: number; center?: { lat: number; lon: number } }>): PoiResult[] {
+  return elements
+    .map(el => {
+      const tags = el.tags || {};
+      const lat = el.lat ?? el.center?.lat;
+      const lng = el.lon ?? el.center?.lon;
+      return {
+        name: tags.name as string,
+        lat,
+        lng,
+        tags,
+      };
+    })
+    .filter((poi): poi is PoiResult => typeof poi.lat === 'number' && typeof poi.lng === 'number')
+    .filter(poi => isPoiAllowed(poi.tags));
+}
+
+export async function fetchNearbyPois(lat: number, lng: number, radius: number = 500): Promise<PoiResult[]> {
+  if (typeof window === 'undefined') return [];
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return [];
+  const cacheKey = getPoiCacheKey(lat, lng, radius);
+  const cachedRaw = localStorage.getItem(cacheKey);
+  if (cachedRaw) {
+    try {
+      const cached: CachedPois = JSON.parse(cachedRaw);
+      if (Date.now() - cached.timestamp < POI_CACHE_MINUTES * 60000) {
+        return cached.items;
+      }
+    } catch {
+      localStorage.removeItem(cacheKey);
+    }
+  }
+
+  const tagFilters = POI_TAG_WHITELIST.map(tag => `nwr(around:${radius},${lat},${lng})[${tag}];`).join('');
+  const query = `[
+    out:json][timeout:25];
+    (${tagFilters});
+    out center tags;
+  `;
+
+  const response = await fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    body: query,
+  });
+
+  if (!response.ok) return [];
+  const data = await response.json();
+  const items = formatPoiResults(data.elements ?? []);
+  const cache: CachedPois = { timestamp: Date.now(), items };
+  localStorage.setItem(cacheKey, JSON.stringify(cache));
+  return items;
+}
+
+function pickRandom<T>(items: T[]): T {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function makeQuestId(prefix: string): string {
+  return `${prefix}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function buildVisitQuest(template: QuestTemplate, poi: PoiResult, isCryptic: boolean): Quest {
+  const description = template.description.replace('%POI%', isCryptic ? 'a nearby landmark' : poi.name);
+  return {
+    id: makeQuestId('visit'),
+    type: 'visit',
+    status: 'active',
+    progress: 0,
+    goal: 1,
+    xpReward: template.xpReward,
+    description,
+    targetName: poi.name,
+    targetLat: poi.lat,
+    targetLng: poi.lng,
+    radiusM: VISIT_RADIUS_M,
+    isCryptic,
+  };
+}
+
+function buildQuestFromTemplate(template: QuestTemplate): Quest {
+  const { templateId, ...rest } = template;
+  return {
+    id: makeQuestId(templateId),
+    status: 'active',
+    progress: 0,
+    ...rest,
+  };
+}
+
+function getFallbackQuest(): Quest {
+  const fallback = QUEST_POOL.filter(q => q.type !== 'travel');
+  const selected = pickRandom(fallback.length ? fallback : QUEST_POOL);
+  return {
+    ...selected,
+    status: 'active',
+    progress: 0,
+  };
+}
+
+function getChainTemplate(): ChainTemplate {
+  return pickRandom(CHAIN_TEMPLATES);
+}
+
+export function startChain(): ChainState {
+  const template = getChainTemplate();
+  return {
+    id: template.id,
+    stepIndex: 0,
+    totalSteps: template.steps.length,
+    type: template.type,
+    multiplier: 1.1,
+    xpEarned: 0,
+  };
+}
+
+export function getNextQuest(
+  completedIds: string[],
+  level: number,
+  chain: ChainState | null,
+  location: { lat: number; lng: number } | null,
+  pois: PoiResult[] = [],
+): { quest: Quest; chain: ChainState | null }
+ {
+  let nextChain = chain;
+  if (!nextChain && Math.random() < 0.3) {
+    nextChain = startChain();
+  }
+
+  if (!nextChain) {
+    return { quest: getRandomQuest(completedIds, level), chain: null };
+  }
+
+  const template = CHAIN_TEMPLATES.find(t => t.id === nextChain?.id);
+  if (!template) {
+    return { quest: getRandomQuest(completedIds, level), chain: null };
+  }
+
+  const step = template.steps[nextChain.stepIndex];
+  if (step.requiresPoi) {
+    if (!location) return { quest: getFallbackQuest(), chain: nextChain };
+    if (!pois.length) return { quest: getFallbackQuest(), chain: nextChain };
+    const poi = pickRandom(pois);
+    const isCryptic = Math.random() < 0.2;
+    return { quest: buildVisitQuest(step, poi, isCryptic), chain: nextChain };
+  }
+
+  return { quest: buildQuestFromTemplate(step), chain: nextChain };
+}
+
 export function getInitialState(): GameState {
   return {
     player: {
@@ -39,6 +274,8 @@ export function getInitialState(): GameState {
       totalDistance: 0,
       achievements: [],
       photoQuestsCompleted: 0,
+      currentChain: null,
+      chainCompletions: 0,
     },
     currentQuest: null,
     world: {
@@ -137,6 +374,7 @@ export function checkNewAchievements(state: GameState): string[] {
   check('streak_7',        player.streak >= 7);
   check('level_5',         player.level >= 5);
   check('guardian',        world.corruption === 0);
+  check('chain_first',     player.chainCompletions >= 1);
 
   return unlocked;
 }
