@@ -726,9 +726,20 @@ export default function Home() {
               {/* ── Location card ─── */}
               <div className="rune-panel" style={{ padding: '16px 20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px', color: '#7a9aac' }}>
-                    COORDINATES
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px', color: '#7a9aac' }}>
+                      COORDINATES
+                    </span>
+                    {isTracking && (
+                      <span style={{
+                        fontFamily: 'var(--font-cinzel)', fontSize: '8px', letterSpacing: '2px',
+                        color: '#4ade80', background: 'rgba(74,222,128,0.1)',
+                        border: '1px solid rgba(74,222,128,0.4)', padding: '2px 8px',
+                      }}>
+                        ● GPS ACTIVE
+                      </span>
+                    )}
+                  </div>
                   {location && (
                     <span style={{ fontFamily: 'var(--font-inconsolata, monospace)', fontSize: '12px', color: '#85a885' }}>
                       {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
