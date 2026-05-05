@@ -786,20 +786,68 @@ export default function Home() {
         </div>
       )}
 
-      {/* ── Quest complete message ─── */}
+      {/* ── Quest complete modal ─── */}
       {questMessage && (
-        <div style={{
-          position: 'fixed', top: achievementToast ? '48px' : '0', left: 0, right: 0, zIndex: 55,
-          background: 'linear-gradient(90deg, #111f18, #172a22)',
-          borderBottom: '1px solid rgba(45,110,72,0.6)',
-          padding: '11px 20px',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          boxShadow: '0 4px 20px rgba(45,110,72,0.12)',
-        }}>
-          <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '11px', letterSpacing: '2px', color: '#4ade80' }}>
-            {questMessage}
-          </span>
-          <button onClick={() => setQuestMessage(null)} style={{ color: '#3d4f60', fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}>×</button>
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 70,
+            background: 'rgba(6, 10, 14, 0.7)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '24px',
+            backdropFilter: 'blur(6px)',
+          }}
+          onClick={() => setQuestMessage(null)}
+        >
+          <div
+            style={{
+              width: '100%', maxWidth: '420px',
+              background: 'linear-gradient(160deg, #101a14, #0b1118)',
+              border: '1px solid rgba(74, 222, 128, 0.35)',
+              boxShadow: '0 24px 80px rgba(5, 12, 18, 0.6)',
+              padding: '22px',
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+              <div>
+                <p style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px', color: '#4ade80', marginBottom: '6px' }}>
+                  QUEST COMPLETE
+                </p>
+                <p style={{ fontFamily: 'var(--font-cinzel)', fontSize: '18px', color: '#d4a030' }}>
+                  Reward Claimed
+                </p>
+              </div>
+              <button
+                onClick={() => setQuestMessage(null)}
+                style={{ color: '#93a6b3', fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div style={{
+              fontSize: '13px', color: '#cdd8e2', lineHeight: 1.6,
+              border: '1px solid rgba(45, 110, 72, 0.4)',
+              background: 'rgba(12, 20, 18, 0.7)',
+              padding: '12px 14px',
+              marginBottom: '16px',
+            }}>
+              {questMessage}
+            </div>
+            <button
+              onClick={() => setQuestMessage(null)}
+              style={{
+                width: '100%',
+                fontFamily: 'var(--font-cinzel)', fontSize: '11px', letterSpacing: '3px',
+                color: '#0f1b14', background: 'linear-gradient(90deg, #4ade80, #a3e635)',
+                border: 'none', padding: '12px 16px', cursor: 'pointer',
+              }}
+            >
+              CONTINUE
+            </button>
+          </div>
         </div>
       )}
 
