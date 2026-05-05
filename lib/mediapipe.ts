@@ -150,6 +150,7 @@ export const OBJECT_TARGETS: Record<string, string[]> = {
   person: ['person'],
   cat: ['cat'],
   dog: ['dog'],
+  pet: ['cat', 'dog'],
   chair: ['chair', 'dining table', 'couch'],
 };
 

@@ -15,6 +15,23 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
   const [detectedObjects, setDetectedObjects] = useState<ObjectDetectionResult[]>([]);
   const [found, setFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const targetConfig: Record<string, { icon: string; label: string }> = {
+    cat: { icon: '🐱', label: 'cat' },
+    dog: { icon: '🐕', label: 'dog' },
+    pet: { icon: '🐾', label: 'cat or dog' },
+    tree: { icon: '🌳', label: 'tree or plant' },
+    plant: { icon: '🌿', label: 'tree or plant' },
+    cup: { icon: '☕', label: 'cup or bottle' },
+    bottle: { icon: '☕', label: 'cup or bottle' },
+    book: { icon: '📖', label: 'book' },
+    person: { icon: '🧑', label: 'person' },
+    bicycle: { icon: '🚲', label: 'bicycle' },
+    chair: { icon: '🪑', label: 'chair' },
+  };
+  const targetInfo = targetConfig[targetObject] || { icon: '◈', label: targetObject };
+  const targetLabel = targetInfo.label;
+  const targetIcon = targetInfo.icon;
   const detectionThreshold = 0.55;
 
   useEffect(() => {
@@ -185,7 +202,7 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
           fontFamily: 'var(--font-cinzel)', fontSize: '11px', letterSpacing: '2px',
           color: '#6a8898', marginBottom: '12px',
         }}>
-          FIND: <span style={{ color: '#d4a030', textTransform: 'capitalize' }}>{targetObject}</span>
+          FIND: <span style={{ color: '#d4a030', textTransform: 'capitalize' }}>{targetIcon} {targetLabel}</span>
         </p>
 
         {found && (
