@@ -145,7 +145,7 @@ export function analyzeMeditation(landmarks: { x: number; y: number; z: number }
 export const OBJECT_TARGETS: Record<string, string[]> = {
   tree: ['potted plant', 'plant', 'tree'],
   cup: ['cup', 'bottle', 'wine glass', 'glass'],
-  book: ['book', 'notebook', 'keyboard'],
+  book: ['book', 'notebook'],
   phone: ['cell phone', 'mobile phone', 'remote', 'tv'],
   person: ['person'],
   cat: ['cat'],
