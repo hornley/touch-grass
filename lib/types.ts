@@ -19,13 +19,14 @@ export interface Player {
 
 export interface Quest {
   id: string;
-  type: 'travel' | 'photo' | 'wait';
+  type: 'travel' | 'photo' | 'wait' | 'meditate' | 'object';
   status: 'active' | 'completed';
   progress: number;
   goal: number;
   xpReward: number;
   description: string;
   minLevel?: number;
+  targetObject?: string;
 }
 
 export type WorldState = 'stable' | 'warning' | 'corrupted';
