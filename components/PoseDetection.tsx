@@ -63,7 +63,7 @@ export function PoseDetection({ onComplete, duration }: PoseDetectionProps) {
           setScore(analysis.score);
           setStatus(analysis.status === 'unknown' ? 'detecting' : analysis.status);
 
-          if (analysis.score > 70) {
+          if (analysis.status === 'yoga') {
             setProgress((prev) => prev + 0.5);
           }
         } else {

@@ -61,7 +61,7 @@ export async function detectPose(video: HTMLVideoElement): Promise<PoseResult | 
 
   return {
     landmarks: results.landmarks[0],
-    confidence: 0.9,
+    confidence: 0.7,
   };
 }
 
@@ -103,7 +103,6 @@ export function analyzeMeditation(landmarks: { x: number; y: number; z: number }
     return { sitting: 0, stillness: 0, score: 0, status: 'unknown' };
   }
 
-  const nose = landmarks[0];
   const leftShoulder = landmarks[11];
   const rightShoulder = landmarks[12];
   const leftHip = landmarks[23];
@@ -116,30 +115,23 @@ export function analyzeMeditation(landmarks: { x: number; y: number; z: number }
   const shoulderMidY = (leftShoulder.y + rightShoulder.y) / 2;
   const hipMidY = (leftHip.y + rightHip.y) / 2;
   const kneeMidY = (leftKnee.y + rightKnee.y) / 2;
-  const ankleMidY = (leftAnkle.y + rightAnkle.y) / 2;
 
   const shoulderWidth = Math.abs(rightShoulder.x - leftShoulder.x);
   const hipWidth = Math.abs(rightHip.x - leftHip.x);
   const kneeWidth = Math.abs(rightKnee.x - leftKnee.x);
+  const ankleWidth = Math.abs(rightAnkle.x - leftAnkle.x);
 
-  const shoulderSymmetry = 1 - Math.abs(leftShoulder.y - rightShoulder.y);
-  const hipSymmetry = 1 - Math.abs(leftHip.y - rightHip.y);
+  const isSitting = hipMidY > kneeMidY && shoulderMidY > hipMidY;
+  const legsCrossed = ankleWidth < shoulderWidth * 0.8;
+  const legSpread = kneeWidth > hipWidth * 1.1;
 
-  const torsoLength = hipMidY - shoulderMidY;
-  const legLength = ankleMidY - kneeMidY;
+  const yogaScore = (isSitting ? 0.5 : 0) + (legsCrossed ? 0.3 : 0) + (legSpread ? 0.2 : 0);
 
-  const isUpright = nose.y < shoulderMidY && shoulderMidY < hipMidY;
-  const isBalanced = shoulderSymmetry > 0.8 && hipSymmetry > 0.8;
-  
-  const legSpread = kneeWidth > hipWidth * 0.5;
-  
-  const yogaScore = (isUpright ? 0.4 : 0) + (isBalanced ? 0.4 : 0) + (legSpread ? 0.2 : 0);
-  
   const sitting = Math.min(1, yogaScore);
   const stillness = 0.7;
 
   const score = sitting * 0.6 + stillness * 0.4;
-  const status: 'yoga' | 'not-yoga' | 'unknown' = score > 50 ? 'yoga' : 'not-yoga';
+  const status: 'yoga' | 'not-yoga' | 'unknown' = score > 0.5 ? 'yoga' : 'not-yoga';
 
   return {
     sitting: sitting * 100,
