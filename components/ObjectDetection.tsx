@@ -14,6 +14,7 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
   const [detectedObjects, setDetectedObjects] = useState<{ label: string; confidence: number }[]>([]);
   const [found, setFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const detectionThreshold = 0.55;
 
   useEffect(() => {
     if (stream && videoRef.current) {
@@ -58,7 +59,7 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
         setDetectedObjects(results);
 
         const match = results.find((obj) =>
-          matchesTarget(obj.label, targetObject) && obj.confidence > 0.7
+          matchesTarget(obj.label, targetObject) && obj.confidence > detectionThreshold
         );
 
         if (match && !found) {
@@ -72,7 +73,7 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
 
     const intervalId = setInterval(runDetection, 1000);
     return () => clearInterval(intervalId);
-  }, [stream, targetObject, onComplete, found]);
+  }, [stream, targetObject, onComplete, found, detectionThreshold]);
 
   if (error) {
     return (
@@ -129,7 +130,7 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
                 <span
                   key={idx}
                   className={`px-3 py-1 rounded-full text-sm ${
-                    matchesTarget(obj.label, targetObject) && obj.confidence > 0.7
+                    matchesTarget(obj.label, targetObject) && obj.confidence > detectionThreshold
                       ? 'bg-green-600 text-white'
                       : 'bg-slate-700 text-gray-300'
                   }`}
