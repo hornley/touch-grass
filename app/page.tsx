@@ -76,7 +76,7 @@ export default function Home() {
   const prevXpRef = useRef<number | null>(null);
 
   const lastLocation = gameState?.player.lastLocation ?? null;
-const { location, error, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist } = useLocation(lastLocation, locationEnabled);
+  const { location, error, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist } = useLocation(lastLocation, locationEnabled);
   const distanceFromLast = lastMovementDistance;
   const lastLocationForQuest = (location ?? lastLocation)
     ? { lat: (location ?? lastLocation)!.lat, lng: (location ?? lastLocation)!.lng }
@@ -223,7 +223,6 @@ const { location, error, isLoading, isTracking, startTracking, stopTracking, cum
 
     const quest = gameState.currentQuest;
     const completesTravel = quest?.type === 'travel' && quest.progress + distanceFromLast >= quest.goal;
-
     if (!completesTravel) {
       setGameState(prev => {
         if (!prev) return prev;
