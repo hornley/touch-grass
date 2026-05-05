@@ -1,4 +1,4 @@
-import { GameState, Quest, World, WorldState } from './types';
+import { GameState, Quest } from './types';
 
 const STORAGE_KEY = 'terraquest_state';
 
@@ -11,7 +11,6 @@ export const ACHIEVEMENTS = [
   { id: 'streak_3',        name: 'Committed',    icon: '🔥', description: '3-day streak' },
   { id: 'streak_7',        name: 'Dedicated',    icon: '⚡', description: '7-day streak' },
   { id: 'level_5',         name: 'Veteran',      icon: '⭐', description: 'Reach level 5' },
-  { id: 'guardian',        name: 'Guardian',     icon: '🛡️', description: 'Reduce world corruption to 0%' },
 ];
 
 export const QUEST_POOL: Omit<Quest, 'status' | 'progress'>[] = [
@@ -41,10 +40,6 @@ export function getInitialState(): GameState {
       photoQuestsCompleted: 0,
     },
     currentQuest: null,
-    world: {
-      corruption: 0,
-      state: 'stable',
-    },
     lastAway: null,
     sessions: [],
     currentSession: null,
@@ -56,7 +51,16 @@ export function loadGameState(): GameState {
   const stored = localStorage.getItem(STORAGE_KEY);
   if (!stored) return getInitialState();
   try {
-    return JSON.parse(stored);
+    const parsed = JSON.parse(stored);
+    if (parsed.world) {
+      delete parsed.world;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      } catch {
+        // Ignore storage write failures during migration and keep the parsed state.
+      }
+    }
+    return parsed;
   } catch {
     return getInitialState();
   }
@@ -120,7 +124,7 @@ export function updateStreak(
 }
 
 export function checkNewAchievements(state: GameState): string[] {
-  const { player, world } = state;
+  const { player } = state;
   const already = new Set(player.achievements);
   const unlocked: string[] = [];
 
@@ -136,29 +140,8 @@ export function checkNewAchievements(state: GameState): string[] {
   check('streak_3',        player.streak >= 3);
   check('streak_7',        player.streak >= 7);
   check('level_5',         player.level >= 5);
-  check('guardian',        world.corruption === 0);
 
   return unlocked;
-}
-
-export function updateWorldState(lastActive: number, current: World): World {
-  const now = Date.now();
-  const diffMinutes = (now - lastActive) / 60000;
-  if (diffMinutes < 5) return current;
-  const corruptionIncrease = Math.floor(diffMinutes / 5) * 10;
-  const newCorruption = Math.min(100, current.corruption + corruptionIncrease);
-  let state: WorldState = 'stable';
-  if (newCorruption >= 80) state = 'corrupted';
-  else if (newCorruption >= 50) state = 'warning';
-  return { corruption: newCorruption, state };
-}
-
-export function reduceCorruption(world: World): World {
-  const newCorruption = Math.max(0, world.corruption - 10);
-  let state: WorldState = 'stable';
-  if (newCorruption >= 80) state = 'corrupted';
-  else if (newCorruption >= 50) state = 'warning';
-  return { corruption: newCorruption, state };
 }
 
 export function calculateReturnReward(lastAway: number | null): { minutes: number; xp: number } {

@@ -8,8 +8,6 @@ import {
   getXpForNextLevel,
   getRandomQuest,
   getQuestXpMultiplier,
-  updateWorldState,
-  reduceCorruption,
   calculateReturnReward,
   updateStreak,
   checkNewAchievements,
@@ -81,13 +79,11 @@ export default function Home() {
 
   useEffect(() => {
     const loaded = loadGameState();
-    const updatedWorld = updateWorldState(loaded.player.lastActive, loaded.world);
     const streakResult = updateStreak(loaded.player.lastStreakDate ?? null, loaded.player.streak ?? 0);
     const streakExtended = streakResult.streak > (loaded.player.streak ?? 0);
 
     const newState: GameState = {
       ...loaded,
-      world: updatedWorld,
       player: {
         ...loaded.player,
         streak: streakResult.streak,
@@ -164,7 +160,6 @@ export default function Home() {
       const newState: GameState = {
         ...prev,
         player: { ...prev.player, lastLocation: location, lastActive: Date.now(), totalDistance: newDist },
-        world: reduceCorruption(prev.world),
       };
 
       if (prev.currentQuest?.type === 'travel') {
@@ -214,7 +209,7 @@ export default function Home() {
         ...prev,
         player: { ...prev.player, xp: newXp, level: newLevel, completedQuests: completedIds, photoQuestsCompleted: (prev.player.photoQuestsCompleted ?? 0) + 1 },
         currentQuest: getRandomQuest(completedIds, newLevel),
-        world: reduceCorruption(prev.world),
+        
         currentSession: prev.currentSession ? { ...prev.currentSession, xpEarned: prev.currentSession.xpEarned + xp, questsCompleted: prev.currentSession.questsCompleted + 1 } : null,
       };
       const unlocked = checkNewAchievements(newState);
@@ -236,7 +231,7 @@ export default function Home() {
         ...prev,
         player: { ...prev.player, xp: newXp, level: newLevel, completedQuests: completedIds },
         currentQuest: getRandomQuest(completedIds, newLevel),
-        world: reduceCorruption(prev.world),
+        
       };
       saveGameState(newState); return newState;
     });
@@ -255,7 +250,7 @@ export default function Home() {
         ...prev,
         player: { ...prev.player, xp: newXp, level: newLevel, completedQuests: completedIds },
         currentQuest: getRandomQuest(completedIds, newLevel),
-        world: reduceCorruption(prev.world),
+        
       };
       saveGameState(newState); return newState;
     });
@@ -273,7 +268,6 @@ export default function Home() {
   const resetGame = useCallback(() => {
     const initial = loadGameState();
     Object.assign(initial.player, { xp: 0, level: 1, completedQuests: [], streak: 0, lastStreakDate: null, totalDistance: 0, achievements: [], photoQuestsCompleted: 0 });
-    Object.assign(initial.world, { corruption: 0, state: 'stable' });
     initial.currentQuest = getRandomQuest([], 1);
     initial.sessions = [];
     initial.currentSession = { startTime: Date.now(), xpEarned: 0, questsCompleted: 0 };
@@ -348,9 +342,9 @@ export default function Home() {
             color: '#6a8898', fontSize: '12px', letterSpacing: '1px',
             lineHeight: 1.9, marginBottom: '44px',
           }}>
-            THE REALM GROWS DARK.<br />
-            YOUR FOOTSTEPS ARE ITS ONLY SALVATION.<br />
-            TRAVEL. CAPTURE. RESTORE.
+            YOUR JOURNEY BEGINS NOW.<br />
+            TRAVEL. CAPTURE. EXPLORE.<br />
+            COMPLETE QUESTS TO RANK UP.
           </p>
 
           {/* CTA button */}
@@ -409,18 +403,6 @@ export default function Home() {
   const SEG = 10;
   const filledSegs = Math.floor(Math.max(0, Math.min(1, xpProgress)) * SEG);
 
-  const worldColor = {
-    stable:    { accent: '#2d6e48', bright: '#4ade80', bar: 'linear-gradient(90deg,#1a4a2e,#2d6e48)' },
-    warning:   { accent: '#92400e', bright: '#f59e0b', bar: 'linear-gradient(90deg,#78350f,#f59e0b)' },
-    corrupted: { accent: '#7f1d1d', bright: '#ef4444', bar: 'linear-gradient(90deg,#450a0a,#ef4444)' },
-  }[gameState.world.state];
-
-  const worldLabel = {
-    stable:    '✦ THE REALM HOLDS',
-    warning:   '⚠ DARKNESS SPREADS',
-    corrupted: '☠ THE REALM FALLS',
-  }[gameState.world.state];
-
   const questBadge = gameState.currentQuest && {
     travel: { label: 'TRAVERSE', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.4)' },
     photo:  { label: 'CAPTURE',  color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.4)' },
@@ -464,7 +446,7 @@ export default function Home() {
             borderColor: '#2a1a5a', boxShadow: '0 0 40px rgba(109,40,217,0.2)',
           }}>
             <p style={{ fontFamily: 'var(--font-cinzel)', color: '#7c3aed', letterSpacing: '4px', fontSize: '9px', marginBottom: '16px' }}>
-              THE REALM REMEMBERS YOU
+              WELCOME BACK
             </p>
             <p style={{
               fontFamily: 'var(--font-cinzel)', fontSize: '60px', fontWeight: 900,
@@ -542,9 +524,7 @@ export default function Home() {
                     <span>LVL: <span style={{ color: '#d4a030' }}>{gameState.player.level}</span></span>
                     <span>STREAK: <span style={{ color: '#f59e0b' }}>{gameState.player.streak}</span></span>
                   </div>
-                  <div>
-                    CORRUPTION: <span style={{ color: gameState.world.corruption > 50 ? '#ef4444' : '#4ade80' }}>{gameState.world.corruption}%</span>
-                  </div>
+                  
                 </div>
 
                 {/* Current quest */}
@@ -636,38 +616,6 @@ export default function Home() {
                       🔥 {gameState.player.streak}D
                     </span>
                   )}
-                </div>
-              </div>
-
-              {/* ── World state card ─── */}
-              <div
-                className={`rune-panel${gameState.world.state === 'corrupted' ? ' animate-corrupt' : ''}`}
-                style={{
-                  padding: '20px',
-                  borderColor: worldColor.accent,
-                }}
-              >
-                <SectionHeader label="THE REALM" right={
-                  <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '1px', color: worldColor.bright, whiteSpace: 'nowrap' }}>
-                    {worldLabel}
-                  </span>
-                } />
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                  <div style={{ flex: 1, height: '6px', background: '#172030', border: '1px solid #2a3d52', overflow: 'hidden' }}>
-                    <div style={{
-                      height: '100%',
-                      width: `${gameState.world.corruption}%`,
-                      background: worldColor.bar,
-                      transition: 'width 0.6s ease',
-                    }} />
-                  </div>
-                  <span style={{
-                    fontFamily: 'var(--font-cinzel)', fontSize: '12px',
-                    color: worldColor.bright, minWidth: '36px', textAlign: 'right',
-                  }}>
-                    {gameState.world.corruption}%
-                  </span>
                 </div>
               </div>
 

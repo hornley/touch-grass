@@ -29,13 +29,6 @@ export interface Quest {
   targetObject?: string;
 }
 
-export type WorldState = 'stable' | 'warning' | 'corrupted';
-
-export interface World {
-  corruption: number;
-  state: WorldState;
-}
-
 export interface Session {
   startTime: number;
   endTime: number;
@@ -52,7 +45,6 @@ export interface CurrentSession {
 export interface GameState {
   player: Player;
   currentQuest: Quest | null;
-  world: World;
   lastAway: number | null;
   sessions: Session[];
   currentSession: CurrentSession | null;
