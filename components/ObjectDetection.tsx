@@ -1,6 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { detectObjects, matchesTarget } from '@/lib/mediapipe';
+import { detectObjects, matchesTarget, ObjectDetectionResult } from '@/lib/mediapipe';
 
 interface ObjectDetectionProps {
   onComplete: () => void;
@@ -9,9 +9,10 @@ interface ObjectDetectionProps {
 
 export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isStarting, setIsStarting] = useState(false);
-  const [detectedObjects, setDetectedObjects] = useState<{ label: string; confidence: number }[]>([]);
+  const [detectedObjects, setDetectedObjects] = useState<ObjectDetectionResult[]>([]);
   const [found, setFound] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const detectionThreshold = 0.55;
@@ -29,6 +30,54 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
       }
     };
   }, [stream]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState < 2) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = video.videoWidth || video.offsetWidth;
+    canvas.height = video.videoHeight || video.offsetHeight;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const targetMatch = detectedObjects.find(
+      (obj) => matchesTarget(obj.label, targetObject) && obj.confidence > detectionThreshold
+    );
+
+    if (targetMatch?.boundingBox) {
+      const box = targetMatch.boundingBox;
+      const x = (box.originX ?? 0) * canvas.width;
+      const y = (box.originY ?? 0) * canvas.height;
+      const w = box.width * canvas.width;
+      const h = box.height * canvas.height;
+
+      ctx.strokeStyle = '#22c55e';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(x, y, w, h);
+      ctx.fillStyle = 'rgba(34, 197, 94, 0.2)';
+      ctx.fillRect(x, y, w, h);
+    } else {
+      for (const obj of detectedObjects) {
+        if (obj.boundingBox && matchesTarget(obj.label, targetObject)) {
+          const box = obj.boundingBox;
+          const x = (box.originX ?? 0) * canvas.width;
+          const y = (box.originY ?? 0) * canvas.height;
+          const w = box.width * canvas.width;
+          const h = box.height * canvas.height;
+
+          ctx.strokeStyle = '#ef4444';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(x, y, w, h);
+          ctx.fillStyle = 'rgba(239, 68, 68, 0.2)';
+          ctx.fillRect(x, y, w, h);
+          break;
+        }
+      }
+    }
+  }, [detectedObjects, targetObject, detectionThreshold]);
 
   const startCamera = async () => {
     setIsStarting(true);
@@ -100,16 +149,22 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
 
   return (
     <div className="space-y-4">
-      <video
-        ref={videoRef}
-        autoPlay
-        playsInline
-        muted
-        loop
-        webkit-playsinline="true"
-        className="w-full rounded-lg bg-black"
-        style={{ minHeight: '200px' }}
-      />
+      <div className="relative rounded-lg overflow-hidden" style={{ minHeight: '200px' }}>
+        <video
+          ref={videoRef}
+          autoPlay
+          playsInline
+          muted
+          loop
+          webkit-playsinline="true"
+          className="w-full rounded-lg bg-black"
+          style={{ width: '100%', display: 'block' }}
+        />
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full pointer-events-none"
+        />
+      </div>
 
       <div className="text-center">
         <p className="text-lg font-semibold mb-2">

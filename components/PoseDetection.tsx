@@ -1,6 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
-import { detectPose, analyzeMeditation } from '@/lib/mediapipe';
+import { detectPose, analyzeMeditation, PoseResult } from '@/lib/mediapipe';
 
 interface PoseDetectionProps {
   onComplete: () => void;
@@ -9,12 +9,14 @@ interface PoseDetectionProps {
 
 export function PoseDetection({ onComplete, duration }: PoseDetectionProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isStarting, setIsStarting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [score, setScore] = useState(0);
   const [status, setStatus] = useState<string>('initializing');
   const [error, setError] = useState<string | null>(null);
+  const [poseResult, setPoseResult] = useState<PoseResult | null>(null);
 
   useEffect(() => {
     if (stream && videoRef.current) {
@@ -60,6 +62,7 @@ export function PoseDetection({ onComplete, duration }: PoseDetectionProps) {
 
         if (result && result.landmarks && result.landmarks.length > 0) {
           const analysis = analyzeMeditation(result.landmarks);
+          setPoseResult(result);
           setScore(analysis.score);
           setStatus(analysis.status === 'unknown' ? 'detecting' : analysis.status);
 
@@ -68,6 +71,7 @@ export function PoseDetection({ onComplete, duration }: PoseDetectionProps) {
           }
         } else {
           setStatus('no-pose');
+          setPoseResult(null);
         }
       } catch (err) {
         console.error('Pose detection error:', err);
@@ -77,6 +81,54 @@ export function PoseDetection({ onComplete, duration }: PoseDetectionProps) {
     const intervalId = setInterval(runDetection, 500);
     return () => clearInterval(intervalId);
   }, [stream]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    canvas.width = video.videoWidth || video.offsetWidth;
+    canvas.height = video.videoHeight || video.offsetHeight;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!poseResult?.landmarks) return;
+
+    const landmarks = poseResult.landmarks;
+    const w = canvas.width;
+    const h = canvas.height;
+    const isYoga = status === 'yoga';
+
+    ctx.strokeStyle = isYoga ? '#22c55e' : '#8855e';
+    ctx.lineWidth = 3;
+    ctx.fillStyle = isYoga ? '#22c55e' : '#8855e';
+
+    const connections = [
+      [11, 12], [11, 23], [12, 24], [23, 24],
+      [23, 25], [25, 27], [24, 26], [26, 28],
+      [11, 13], [12, 14], [13, 15], [14, 16],
+    ];
+
+    for (const [i, j] of connections) {
+      if (landmarks[i] && landmarks[j]) {
+        ctx.beginPath();
+        ctx.moveTo(landmarks[i].x * w, landmarks[i].y * h);
+        ctx.lineTo(landmarks[j].x * w, landmarks[j].y * h);
+        ctx.stroke();
+      }
+    }
+
+    const keyIndices = [0, 11, 12, 23, 24, 25, 26, 27, 28];
+    for (const idx of keyIndices) {
+      if (landmarks[idx]) {
+        ctx.beginPath();
+        ctx.arc(landmarks[idx].x * w, landmarks[idx].y * h, 8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }, [poseResult, status]);
 
   useEffect(() => {
     if (progress >= duration) {
@@ -118,6 +170,11 @@ export function PoseDetection({ onComplete, duration }: PoseDetectionProps) {
         webkit-playsinline="true"
         className="w-full"
         style={{ minHeight: '300px', backgroundColor: '#000' }}
+      />
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 w-full h-full pointer-events-none"
+        style={{ minHeight: '300px' }}
       />
 
       <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
