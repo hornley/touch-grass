@@ -15,19 +15,13 @@ export const ACHIEVEMENTS = [
 ];
 
 export const QUEST_POOL: Omit<Quest, 'status' | 'progress'>[] = [
-  { id: 'quest_1', type: 'photo',  goal: 1,    xpReward: 15, description: 'Take a photo to collect energy' },
-  { id: 'quest_2', type: 'photo',  goal: 1,    xpReward: 20, description: 'Capture your surroundings' },
-  { id: 'quest_3', type: 'photo',  goal: 1,    xpReward: 25, description: 'Take a photo to restore world energy' },
-  { id: 'quest_4', type: 'photo',  goal: 1,    xpReward: 30, description: 'Document your journey with a photo' },
   { id: 'quest_5', type: 'travel', goal: 100,  xpReward: 20, description: 'Walk 100 meters to explore new territory' },
-  { id: 'quest_6', type: 'wait',   goal: 1,    xpReward: 10, description: 'Wait and meditate (return after 5 minutes)' },
   { id: 'quest_7', type: 'travel', goal: 1000, xpReward: 50, description: 'Walk 1 kilometer — a true explorer', minLevel: 5 },
   { id: 'quest_8', type: 'meditate', goal: 30, xpReward: 25, description: 'Meditate for 30 seconds' },
   { id: 'quest_9', type: 'meditate', goal: 30, xpReward: 30, description: 'Clear your mind for 30 seconds' },
   { id: 'quest_10', type: 'object', goal: 1, xpReward: 20, description: 'Find a tree or plant', targetObject: 'tree' },
   { id: 'quest_11', type: 'object', goal: 1, xpReward: 20, description: 'Find a cup or bottle', targetObject: 'cup' },
   { id: 'quest_12', type: 'object', goal: 1, xpReward: 20, description: 'Find a book', targetObject: 'book' },
-  { id: 'quest_13', type: 'object', goal: 1, xpReward: 20, description: 'Find a phone', targetObject: 'phone' },
   { id: 'quest_14', type: 'object', goal: 1, xpReward: 25, description: 'Find a person', targetObject: 'person' },
   { id: 'quest_15', type: 'object', goal: 1, xpReward: 25, description: 'Find a cat or dog', targetObject: 'cat' },
 ];
