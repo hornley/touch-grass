@@ -15,6 +15,7 @@ export function BottomNav({ activeTab, onTabChange }: {
   return (
     <nav style={{
       position: 'fixed', bottom: 0, left: 0, right: 0,
+      zIndex: 10,
       background: '#0d1520',
       borderTop: '1px solid #2a3d52',
       display: 'flex',
