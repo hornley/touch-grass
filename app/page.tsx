@@ -14,6 +14,8 @@ import {
 } from '@/lib/game';
 import { useLocation } from '@/lib/useLocation';
 import { CameraCapture } from '@/components/CameraCapture';
+import { PoseDetection } from '@/components/PoseDetection';
+import { ObjectDetection } from '@/components/ObjectDetection';
 
 export default function Home() {
   const [gameState, setGameState] = useState<GameState | null>(null);
@@ -142,6 +144,52 @@ export default function Home() {
       const newXp = prev.player.xp + prev.currentQuest.xpReward;
       const newLevel = calculateLevel(newXp);
       setQuestMessage(`Photo captured! +${prev.currentQuest.xpReward} XP`);
+      const newState = {
+        ...prev,
+        player: {
+          ...prev.player,
+          xp: newXp,
+          level: newLevel,
+          completedQuests: [...prev.player.completedQuests, prev.currentQuest.id],
+        },
+        currentQuest: getRandomQuest([...prev.player.completedQuests, prev.currentQuest.id]),
+        world: reduceCorruption(prev.world),
+      };
+      saveGameState(newState);
+      return newState;
+    });
+  }, [gameState]);
+
+  const handleMeditateComplete = useCallback(() => {
+    if (!gameState?.currentQuest || gameState.currentQuest.type !== 'meditate') return;
+    setGameState(prev => {
+      if (!prev || !prev.currentQuest || prev.currentQuest.type !== 'meditate') return prev;
+      const newXp = prev.player.xp + prev.currentQuest.xpReward;
+      const newLevel = calculateLevel(newXp);
+      setQuestMessage(`Meditation complete! +${prev.currentQuest.xpReward} XP`);
+      const newState = {
+        ...prev,
+        player: {
+          ...prev.player,
+          xp: newXp,
+          level: newLevel,
+          completedQuests: [...prev.player.completedQuests, prev.currentQuest.id],
+        },
+        currentQuest: getRandomQuest([...prev.player.completedQuests, prev.currentQuest.id]),
+        world: reduceCorruption(prev.world),
+      };
+      saveGameState(newState);
+      return newState;
+    });
+  }, [gameState]);
+
+  const handleObjectComplete = useCallback(() => {
+    if (!gameState?.currentQuest || gameState.currentQuest.type !== 'object') return;
+    setGameState(prev => {
+      if (!prev || !prev.currentQuest || prev.currentQuest.type !== 'object') return prev;
+      const newXp = prev.player.xp + prev.currentQuest.xpReward;
+      const newLevel = calculateLevel(newXp);
+      setQuestMessage(`Found it! +${prev.currentQuest.xpReward} XP`);
       const newState = {
         ...prev,
         player: {
@@ -366,6 +414,18 @@ export default function Home() {
               )}
               {gameState.currentQuest.type === 'wait' && (
                 <p className="text-sm text-gray-400">Complete this quest by returning after 5+ minutes</p>
+              )}
+              {gameState.currentQuest.type === 'meditate' && (
+                <PoseDetection
+                  duration={gameState.currentQuest.goal}
+                  onComplete={handleMeditateComplete}
+                />
+              )}
+              {gameState.currentQuest.type === 'object' && (
+                <ObjectDetection
+                  targetObject={gameState.currentQuest.targetObject || 'tree'}
+                  onComplete={handleObjectComplete}
+                />
               )}
             </div>
           ) : (
