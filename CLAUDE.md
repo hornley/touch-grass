@@ -42,6 +42,12 @@ Pass `?lat=X&lng=Y` query params to bypass real GPS — `useLocation` reads thes
 
 `app/page.tsx` has a hardcoded `if (true)` debug panel with Skip Quest and Reset Game buttons — always visible.
 
+### Git workflow
+
+- **Check git branch** before making any changes — run `git branch` to verify you're on a feature branch
+- **Always create PR** — never push directly to `main`/`master`
+- **Create feature branch first** — `git checkout -b feature/your-feature-name` before editing
+
 ## Stack
 
 Next.js 16, React 19, TypeScript, Tailwind v4 (PostCSS plugin), no external state library.

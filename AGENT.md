@@ -29,6 +29,14 @@ npm run lint   # eslint
 
 ---
 
+## Git workflow
+
+- **Check git branch** before making any changes — run `git branch` to verify you're on a feature branch
+- **Always create PR** — never push directly to `main`/`master`
+- **Create feature branch first** — `git checkout -b feature/your-feature-name` before editing
+
+---
+
 ## Data flow
 
 ```
