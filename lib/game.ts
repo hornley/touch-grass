@@ -54,7 +54,11 @@ export function loadGameState(): GameState {
     const parsed = JSON.parse(stored);
     if (parsed.world) {
       delete parsed.world;
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      } catch {
+        // Ignore storage write failures during migration and keep the parsed state.
+      }
     }
     return parsed;
   } catch {
