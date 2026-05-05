@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { GameState } from '@/lib/types';
 import {
   loadGameState,
@@ -72,6 +72,8 @@ export default function Home() {
   const [visitCapturePending, setVisitCapturePending] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [tabFadeKey, setTabFadeKey] = useState(0);
+  const [xpSpark, setXpSpark] = useState(false);
+  const prevXpRef = useRef<number | null>(null);
 
   const lastLocation = gameState?.player.lastLocation ?? null;
 const { location, error, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist } = useLocation(lastLocation, locationEnabled);
@@ -191,6 +193,17 @@ const { location, error, isLoading, isTracking, startTracking, stopTracking, cum
     window.addEventListener('beforeunload', () => { if (gameState) saveGameState(gameState); });
     return () => { document.removeEventListener('visibilitychange', handleVisibilityChange); };
   }, [gameState]);
+
+  useEffect(() => {
+    if (!gameState) return;
+    const prevXp = prevXpRef.current;
+    prevXpRef.current = gameState.player.xp;
+    if (prevXp !== null && gameState.player.xp > prevXp) {
+      setXpSpark(true);
+      const timer = window.setTimeout(() => setXpSpark(false), 650);
+      return () => window.clearTimeout(timer);
+    }
+  }, [gameState?.player.xp]);
 
   useEffect(() => {
     if (!gameState || !locationEnabled) return;
@@ -678,9 +691,6 @@ const { location, error, isLoading, isTracking, startTracking, stopTracking, cum
   const xpForThisLevel = Math.pow(gameState.player.level - 1, 2) * 100;
   const xpForNextLevel = getXpForNextLevel(gameState.player.level);
   const xpProgress = (gameState.player.xp - xpForThisLevel) / (xpForNextLevel - xpForThisLevel);
-  const SEG = 10;
-  const filledSegs = Math.floor(Math.max(0, Math.min(1, xpProgress)) * SEG);
-
   const questBadge = gameState.currentQuest && {
     travel: { label: 'TRAVERSE', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.4)' },
     photo:  { label: 'CAPTURE',  color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.4)' },
@@ -694,6 +704,28 @@ const { location, error, isLoading, isTracking, startTracking, stopTracking, cum
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: '#0d1520' }}>
       <DotGrid />
+
+      {/* ── XP navbar ─── */}
+      <div className="xp-nav">
+        <div className="xp-nav__top">
+          <div className="xp-nav__rank">
+            <span className="xp-nav__rank-label">RANK</span>
+            <span className="xp-nav__rank-value">{toRoman(gameState.player.level)}</span>
+          </div>
+          <div className="xp-nav__meta">
+            <span className="xp-nav__xp">{gameState.player.xp} XP</span>
+            <span className="xp-nav__next">NEXT {xpForNextLevel} XP</span>
+            {gameState.player.streak > 0 && (
+              <span className="xp-nav__streak">🔥 {gameState.player.streak}D</span>
+            )}
+          </div>
+        </div>
+
+        <div className={`xp-bar${xpSpark ? ' xp-bar--spark' : ''}`}>
+          <div className="xp-bar__fill" style={{ width: `${Math.min(100, Math.max(0, xpProgress * 100))}%` }} />
+          <div className="xp-bar__flare" />
+        </div>
+      </div>
 
       {/* ── Achievement toast ─── */}
       {achievementToast && (
@@ -770,7 +802,7 @@ const { location, error, isLoading, isTracking, startTracking, stopTracking, cum
       )}
 
       {/* ── Main content ─── */}
-      <main style={{ flex: 1, overflowY: 'auto', paddingBottom: '72px', position: 'relative', zIndex: 1 }}>
+      <main className="main-scroll" style={{ flex: 1, overflowY: 'auto', paddingBottom: '72px', position: 'relative', zIndex: 1 }}>
 
         {activeTab === 'home' && (
           <div style={{ padding: '20px 16px', maxWidth: '480px', margin: '0 auto' }}>
@@ -883,20 +915,10 @@ const { location, error, isLoading, isTracking, startTracking, stopTracking, cum
 
               {/* ── Player card ─── */}
               <div className="rune-panel" style={{ padding: '20px' }}>
-                <SectionHeader
-                  label="TERRAQUEST"
-                  right={
-                    <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '18px', color: '#d4a030', letterSpacing: '2px', whiteSpace: 'nowrap', textShadow: '0 0 12px rgba(212,160,48,0.4)' }}>
-                      RANK {toRoman(gameState.player.level)}
-                    </span>
-                  }
-                />
+                <SectionHeader label="TERRAQUEST" />
 
-                {/* XP segments */}
-                <div className="seg-bar" style={{ marginBottom: '10px' }}>
-                  {Array.from({ length: SEG }).map((_, i) => (
-                    <div key={i} className={`seg-bar__cell${i < filledSegs ? ' seg-bar__cell--filled' : ''}`} />
-                  ))}
+                <div className="xp-bar xp-bar--mini" style={{ marginBottom: '12px' }}>
+                  <div className="xp-bar__fill" style={{ width: `${Math.min(100, Math.max(0, xpProgress * 100))}%` }} />
                 </div>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -906,11 +928,6 @@ const { location, error, isLoading, isTracking, startTracking, stopTracking, cum
                       <span style={{ color: '#d4a030' }}> &nbsp;·&nbsp; ×{getQuestXpMultiplier(gameState.player.level).toFixed(1)} BONUS</span>
                     )}
                   </span>
-                  {gameState.player.streak > 0 && (
-                    <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', color: '#f59e0b', letterSpacing: '1px' }}>
-                      🔥 {gameState.player.streak}D
-                    </span>
-                  )}
                 </div>
               </div>
 
