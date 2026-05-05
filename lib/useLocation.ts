@@ -1,21 +1,42 @@
 'use client';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { Location } from './types';
 import { calculateDistance } from './game';
+
+interface Position {
+  lat: number;
+  lng: number;
+  timestamp: number;
+  accuracy: number;
+}
 
 interface UseLocationResult {
   location: Location | null;
   error: string | null;
   isLoading: boolean;
+  isTracking: boolean;
   requestLocation: () => Promise<void>;
-  distanceFromLast: number | null;
+  startTracking: () => void;
+  stopTracking: () => void;
+  cumulativeDistance: number;
+  lastMovementDistance: number;
 }
+
+const UPDATE_INTERVAL = 3000;
+const MIN_ACCURACY = 20;
+const MIN_MOVEMENT = 5;
+const MAX_SPEED_MPS = 10;
 
 export function useLocation(lastLocation: Location | null, enabled: boolean = false): UseLocationResult {
   const [location, setLocation] = useState<Location | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [distanceFromLast, setDistanceFromLast] = useState<number | null>(null);
+  const [isTracking, setIsTracking] = useState(false);
+  const [cumulativeDistance, setCumulativeDistance] = useState(0);
+  const [lastMovementDistance, setLastMovementDistance] = useState(0);
+
+  const watchIdRef = useRef<number | null>(null);
+  const lastProcessedRef = useRef<{ lat: number; lng: number; time: number } | null>(null);
 
   const requestLocation = useCallback(async () => {
     setIsLoading(true);
@@ -32,15 +53,6 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
         timestamp: Date.now(),
       };
       setLocation(simulatedLocation);
-      if (lastLocation) {
-        const dist = calculateDistance(
-          lastLocation.lat,
-          lastLocation.lng,
-          simulatedLocation.lat,
-          simulatedLocation.lng
-        );
-        setDistanceFromLast(dist);
-      }
       setIsLoading(false);
       return;
     }
@@ -66,16 +78,6 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
         timestamp: Date.now(),
       };
       setLocation(newLocation);
-
-      if (lastLocation) {
-        const dist = calculateDistance(
-          lastLocation.lat,
-          lastLocation.lng,
-          newLocation.lat,
-          newLocation.lng
-        );
-        setDistanceFromLast(dist);
-      }
     } catch (err) {
       const ge = err as GeolocationPositionError;
       if (ge.code === ge.PERMISSION_DENIED) {
@@ -90,7 +92,75 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
     } finally {
       setIsLoading(false);
     }
-  }, [lastLocation]);
+  }, []);
+
+  const startTracking = useCallback(() => {
+    if (isTracking || !navigator.geolocation) return;
+
+    setIsTracking(true);
+    setCumulativeDistance(0);
+    setLastMovementDistance(0);
+    lastProcessedRef.current = null;
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      (pos) => {
+        const accuracy = pos.coords.accuracy;
+        if (accuracy > MIN_ACCURACY) return;
+
+        const newPos: Position = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          timestamp: Date.now(),
+          accuracy,
+        };
+
+        if (lastProcessedRef.current) {
+            const timeDiff = (newPos.timestamp - lastProcessedRef.current.time) / 1000;
+            if (timeDiff > 0) {
+              const segmentDist = calculateDistance(
+                lastProcessedRef.current.lat, lastProcessedRef.current.lng,
+                newPos.lat, newPos.lng
+              );
+
+              const speedMps = segmentDist / timeDiff;
+
+              if (speedMps <= MAX_SPEED_MPS && segmentDist >= MIN_MOVEMENT) {
+                setCumulativeDistance((prevDist) => prevDist + segmentDist);
+                setLastMovementDistance(segmentDist);
+              }
+            }
+          }
+
+          lastProcessedRef.current = {
+            lat: newPos.lat,
+            lng: newPos.lng,
+            time: newPos.timestamp,
+          };
+
+        setLocation({
+          lat: newPos.lat,
+          lng: newPos.lng,
+          timestamp: newPos.timestamp,
+        });
+      },
+      (err) => {
+        console.error('Watch position error:', err);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: UPDATE_INTERVAL,
+        maximumAge: UPDATE_INTERVAL,
+      }
+    );
+  }, [isTracking]);
+
+  const stopTracking = useCallback(() => {
+    if (watchIdRef.current !== null) {
+      navigator.geolocation.clearWatch(watchIdRef.current);
+      watchIdRef.current = null;
+    }
+    setIsTracking(false);
+  }, []);
 
   useEffect(() => {
     if (enabled && !location) {
@@ -98,5 +168,23 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
     }
   }, [enabled, location, requestLocation]);
 
-  return { location, error, isLoading, requestLocation, distanceFromLast };
+  useEffect(() => {
+    return () => {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+      }
+    };
+  }, []);
+
+  return {
+    location,
+    error,
+    isLoading,
+    isTracking,
+    requestLocation,
+    startTracking,
+    stopTracking,
+    cumulativeDistance,
+    lastMovementDistance,
+  };
 }

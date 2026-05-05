@@ -70,7 +70,7 @@ export default function Home() {
   const [tabFadeKey, setTabFadeKey] = useState(0);
 
   const lastLocation = gameState?.player.lastLocation ?? null;
-  const { location, error, isLoading, distanceFromLast } = useLocation(lastLocation, locationEnabled);
+  const { location, error, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance } = useLocation(lastLocation, locationEnabled);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -152,18 +152,28 @@ export default function Home() {
   }, [gameState]);
 
   useEffect(() => {
-    if (!gameState || !location || distanceFromLast === null || distanceFromLast <= 100) return;
+    if (!gameState || !location) return;
+
+    if (gameState.currentQuest?.type === 'travel') {
+      if (!isTracking) startTracking();
+    } else {
+      if (isTracking) stopTracking();
+    }
+  }, [gameState?.currentQuest?.type, isTracking, startTracking, stopTracking]);
+
+  useEffect(() => {
+    if (!gameState || !location || lastMovementDistance <= 0) return;
 
     setGameState(prev => {
       if (!prev) return prev;
-      const newDist = (prev.player.totalDistance ?? 0) + distanceFromLast;
+      const newDist = (prev.player.totalDistance ?? 0) + lastMovementDistance;
       const newState: GameState = {
         ...prev,
         player: { ...prev.player, lastLocation: location, lastActive: Date.now(), totalDistance: newDist },
       };
 
       if (prev.currentQuest?.type === 'travel') {
-        const progress = prev.currentQuest.progress + distanceFromLast;
+        const progress = prev.currentQuest.progress + lastMovementDistance;
         if (progress >= prev.currentQuest.goal) {
           const xp = Math.round(prev.currentQuest.xpReward * getQuestXpMultiplier(prev.player.level));
           const newXp = prev.player.xp + xp;
@@ -171,19 +181,18 @@ export default function Home() {
           setQuestMessage(`QUEST COMPLETE  ·  +${xp} XP`);
           newState.player = { ...newState.player, xp: newXp, level: newLevel, completedQuests: [...newState.player.completedQuests, prev.currentQuest.id] };
           newState.currentQuest = getRandomQuest(newState.player.completedQuests, newLevel);
+          stopTracking();
           if (newState.currentSession) newState.currentSession = { ...newState.currentSession, xpEarned: newState.currentSession.xpEarned + xp, questsCompleted: newState.currentSession.questsCompleted + 1 };
         } else {
           newState.currentQuest = { ...prev.currentQuest, progress };
         }
-      } else {
-        newState.currentQuest = getRandomQuest(prev.player.completedQuests, prev.player.level);
       }
 
       const unlocked = checkNewAchievements(newState);
       if (unlocked.length) { newState.player = { ...newState.player, achievements: [...newState.player.achievements, ...unlocked] }; showAchievementToasts(unlocked); }
       saveGameState(newState); return newState;
     });
-  }, [location, distanceFromLast]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [location, lastMovementDistance, stopTracking]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStart = () => {
     if (!gameState) return;
@@ -726,7 +735,7 @@ export default function Home() {
                     </span>
                   )}
                 </div>
-                {(isLoading || error || distanceFromLast !== null || !location) && (
+                {(isLoading || error || !location) && (
                   <div style={{
                     display: 'flex', alignItems: 'center', gap: '8px',
                     marginTop: '8px', padding: '8px 0',
@@ -741,13 +750,15 @@ export default function Home() {
                         <span style={{ fontSize: '14px', color: '#ef4444' }}>⚠</span>
                         <span style={{ fontSize: '11px', color: '#ef4444', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>{error.toUpperCase()}</span>
                       </>
-                    ) : distanceFromLast !== null ? (
+                    ) : location ? (
                       <>
-                        <span style={{ fontSize: '14px', color: distanceFromLast > 100 ? '#85a885' : '#4e6878' }}>
-                          {distanceFromLast > 100 ? '✦' : '◦'}
-                        </span>
+                        {isTracking && (
+                          <span style={{ fontSize: '14px', color: '#4ade80', marginRight: '6px' }}>●</span>
+                        )}
                         <span style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px' }}>
-                          {Math.round(distanceFromLast)} M FROM LAST POSITION
+                          {isTracking && cumulativeDistance > 0
+                            ? `TRACKING: ${Math.round(cumulativeDistance)} M`
+                            : location.lat.toFixed(5) + ', ' + location.lng.toFixed(5)}
                         </span>
                       </>
                     ) : (
