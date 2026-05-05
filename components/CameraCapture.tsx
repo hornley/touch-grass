@@ -100,10 +100,12 @@ export function CameraCapture({ onCapture }: CameraCaptureProps) {
       <div style={{ display: 'flex', gap: '8px' }}>
         <button
           onClick={capturePhoto}
+          className={stream ? 'animate-pulse-glow' : undefined}
           style={{
             flex: 1, fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px',
             color: '#d4a030', background: 'rgba(212,160,48,0.07)',
             border: '1px solid #d4a030', padding: '12px', cursor: 'pointer',
+            transition: 'box-shadow 0.3s ease',
           }}
         >
           ◈ CAPTURE
