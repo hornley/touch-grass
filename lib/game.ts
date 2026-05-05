@@ -2,13 +2,26 @@ import { GameState, Quest, World, WorldState } from './types';
 
 const STORAGE_KEY = 'terraquest_state';
 
+export const ACHIEVEMENTS = [
+  { id: 'first_quest',     name: 'First Steps',  icon: '🌱', description: 'Complete your first quest' },
+  { id: 'photographer_3',  name: 'Shutter Bug',  icon: '📸', description: 'Complete 3 photo quests' },
+  { id: 'photographer_10', name: 'Lens Master',  icon: '🎞️', description: 'Complete 10 photo quests' },
+  { id: 'explorer_500m',   name: 'Pathfinder',   icon: '🚶', description: 'Walk 500 meters total' },
+  { id: 'explorer_1km',    name: 'Wanderer',     icon: '🗺️', description: 'Walk 1 kilometer total' },
+  { id: 'streak_3',        name: 'Committed',    icon: '🔥', description: '3-day streak' },
+  { id: 'streak_7',        name: 'Dedicated',    icon: '⚡', description: '7-day streak' },
+  { id: 'level_5',         name: 'Veteran',      icon: '⭐', description: 'Reach level 5' },
+  { id: 'guardian',        name: 'Guardian',     icon: '🛡️', description: 'Reduce world corruption to 0%' },
+];
+
 export const QUEST_POOL: Omit<Quest, 'status' | 'progress'>[] = [
-  { id: 'quest_1', type: 'photo', goal: 1, xpReward: 15, description: 'Take a photo to collect energy' },
-  { id: 'quest_2', type: 'photo', goal: 1, xpReward: 20, description: 'Capture your surroundings' },
-  { id: 'quest_3', type: 'photo', goal: 1, xpReward: 25, description: 'Take a photo to restore world energy' },
-  { id: 'quest_4', type: 'photo', goal: 1, xpReward: 30, description: 'Document your journey with a photo' },
-  { id: 'quest_5', type: 'travel', goal: 100, xpReward: 20, description: 'Walk 100 meters to explore new territory' },
-  { id: 'quest_6', type: 'wait', goal: 1, xpReward: 10, description: 'Wait and meditate (return after 5 minutes)' },
+  { id: 'quest_1', type: 'photo',  goal: 1,    xpReward: 15, description: 'Take a photo to collect energy' },
+  { id: 'quest_2', type: 'photo',  goal: 1,    xpReward: 20, description: 'Capture your surroundings' },
+  { id: 'quest_3', type: 'photo',  goal: 1,    xpReward: 25, description: 'Take a photo to restore world energy' },
+  { id: 'quest_4', type: 'photo',  goal: 1,    xpReward: 30, description: 'Document your journey with a photo' },
+  { id: 'quest_5', type: 'travel', goal: 100,  xpReward: 20, description: 'Walk 100 meters to explore new territory' },
+  { id: 'quest_6', type: 'wait',   goal: 1,    xpReward: 10, description: 'Wait and meditate (return after 5 minutes)' },
+  { id: 'quest_7', type: 'travel', goal: 1000, xpReward: 50, description: 'Walk 1 kilometer — a true explorer', minLevel: 5 },
 ];
 
 export function getInitialState(): GameState {
@@ -19,6 +32,11 @@ export function getInitialState(): GameState {
       lastLocation: null,
       lastActive: Date.now(),
       completedQuests: [],
+      streak: 0,
+      lastStreakDate: null,
+      totalDistance: 0,
+      achievements: [],
+      photoQuestsCompleted: 0,
     },
     currentQuest: null,
     world: {
@@ -26,6 +44,8 @@ export function getInitialState(): GameState {
       state: 'stable',
     },
     lastAway: null,
+    sessions: [],
+    currentSession: null,
   };
 }
 
@@ -65,15 +85,58 @@ export function calculateDistance(lat1: number, lng1: number, lat2: number, lng2
   return R * c;
 }
 
-export function getRandomQuest(completedIds: string[]): Quest {
-  const available = QUEST_POOL.filter(q => !completedIds.includes(q.id));
-  const pool = available.length > 0 ? available : QUEST_POOL;
+export function getQuestXpMultiplier(level: number): number {
+  if (level >= 7) return 1.5;
+  if (level >= 3) return 1.2;
+  return 1.0;
+}
+
+export function getRandomQuest(completedIds: string[], level: number = 1): Quest {
+  const available = QUEST_POOL.filter(q => !completedIds.includes(q.id) && (q.minLevel ?? 1) <= level);
+  const pool = available.length > 0 ? available : QUEST_POOL.filter(q => (q.minLevel ?? 1) <= level);
   const selected = pool[Math.floor(Math.random() * pool.length)];
   return {
     ...selected,
     status: 'active',
     progress: 0,
   };
+}
+
+export function updateStreak(
+  lastStreakDate: string | null,
+  currentStreak: number,
+): { streak: number; lastStreakDate: string } {
+  const today = new Date().toISOString().slice(0, 10);
+  if (lastStreakDate === today) {
+    return { streak: currentStreak, lastStreakDate: today };
+  }
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  if (lastStreakDate === yesterday) {
+    return { streak: currentStreak + 1, lastStreakDate: today };
+  }
+  return { streak: 1, lastStreakDate: today };
+}
+
+export function checkNewAchievements(state: GameState): string[] {
+  const { player, world } = state;
+  const already = new Set(player.achievements);
+  const unlocked: string[] = [];
+
+  const check = (id: string, condition: boolean) => {
+    if (!already.has(id) && condition) unlocked.push(id);
+  };
+
+  check('first_quest',     player.completedQuests.length >= 1);
+  check('photographer_3',  player.photoQuestsCompleted >= 3);
+  check('photographer_10', player.photoQuestsCompleted >= 10);
+  check('explorer_500m',   player.totalDistance >= 500);
+  check('explorer_1km',    player.totalDistance >= 1000);
+  check('streak_3',        player.streak >= 3);
+  check('streak_7',        player.streak >= 7);
+  check('level_5',         player.level >= 5);
+  check('guardian',        world.corruption === 0);
+
+  return unlocked;
 }
 
 export function updateWorldState(lastActive: number, current: World): World {

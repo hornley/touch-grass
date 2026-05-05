@@ -10,6 +10,11 @@ export interface Player {
   lastLocation: Location | null;
   lastActive: number;
   completedQuests: string[];
+  streak: number;
+  lastStreakDate: string | null;
+  totalDistance: number;
+  achievements: string[];
+  photoQuestsCompleted: number;
 }
 
 export interface Quest {
@@ -20,6 +25,7 @@ export interface Quest {
   goal: number;
   xpReward: number;
   description: string;
+  minLevel?: number;
 }
 
 export type WorldState = 'stable' | 'warning' | 'corrupted';
@@ -29,9 +35,24 @@ export interface World {
   state: WorldState;
 }
 
+export interface Session {
+  startTime: number;
+  endTime: number;
+  xpEarned: number;
+  questsCompleted: number;
+}
+
+export interface CurrentSession {
+  startTime: number;
+  xpEarned: number;
+  questsCompleted: number;
+}
+
 export interface GameState {
   player: Player;
   currentQuest: Quest | null;
   world: World;
   lastAway: number | null;
+  sessions: Session[];
+  currentSession: CurrentSession | null;
 }
