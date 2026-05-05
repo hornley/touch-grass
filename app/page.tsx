@@ -194,26 +194,29 @@ const { location, error, isLoading, isTracking, startTracking, stopTracking, cum
     return () => { document.removeEventListener('visibilitychange', handleVisibilityChange); };
   }, [gameState]);
 
+  const currentXp = gameState?.player.xp ?? null;
+  const currentQuestType = gameState?.currentQuest?.type;
+
   useEffect(() => {
-    if (!gameState) return;
+    if (currentXp === null) return;
     const prevXp = prevXpRef.current;
-    prevXpRef.current = gameState.player.xp;
-    if (prevXp !== null && gameState.player.xp > prevXp) {
+    prevXpRef.current = currentXp;
+    if (prevXp !== null && currentXp > prevXp) {
       setXpSpark(true);
       const timer = window.setTimeout(() => setXpSpark(false), 650);
       return () => window.clearTimeout(timer);
     }
-  }, [gameState?.player.xp]);
+  }, [currentXp]);
 
   useEffect(() => {
-    if (!gameState || !locationEnabled) return;
+    if (!locationEnabled) return;
 
-    if (gameState.currentQuest?.type === 'travel') {
+    if (currentQuestType === 'travel') {
       if (!isTracking) startTracking();
     } else {
       if (isTracking) stopTracking();
     }
-  }, [gameState?.currentQuest?.type, locationEnabled, isTracking, startTracking, stopTracking]);
+  }, [currentQuestType, locationEnabled, isTracking, startTracking, stopTracking]);
 
   useEffect(() => {
     if (!gameState || !location || lastMovementDistance <= 0) return;
