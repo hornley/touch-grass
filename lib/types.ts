@@ -17,15 +17,18 @@ export interface Player {
   photoQuestsCompleted: number;
 }
 
+export type QuestType = 'travel' | 'photo' | 'wait' | 'meditate' | 'object';
+
 export interface Quest {
   id: string;
-  type: 'travel' | 'photo' | 'wait';
+  type: QuestType;
   status: 'active' | 'completed';
   progress: number;
   goal: number;
   xpReward: number;
   description: string;
   minLevel?: number;
+  targetObject?: string;
 }
 
 export type WorldState = 'stable' | 'warning' | 'corrupted';

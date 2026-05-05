@@ -18,6 +18,8 @@ import {
 } from '@/lib/game';
 import { useLocation } from '@/lib/useLocation';
 import { CameraCapture } from '@/components/CameraCapture';
+import { PoseDetection } from '@/components/PoseDetection';
+import { ObjectDetection } from '@/components/ObjectDetection';
 import { BottomNav } from '@/components/BottomNav';
 import { StatsTab } from '@/components/StatsTab';
 import { AchievementsTab } from '@/components/AchievementsTab';
@@ -220,6 +222,52 @@ export default function Home() {
     });
   }, [gameState, showAchievementToasts]);
 
+  const handleMeditateComplete = useCallback(() => {
+    if (!gameState?.currentQuest || gameState.currentQuest.type !== 'meditate') return;
+    setGameState(prev => {
+      if (!prev || !prev.currentQuest || prev.currentQuest.type !== 'meditate') return prev;
+      const newXp = prev.player.xp + prev.currentQuest.xpReward;
+      const newLevel = calculateLevel(newXp);
+      setQuestMessage(`Meditation complete! +${prev.currentQuest.xpReward} XP`);
+      const newState = {
+        ...prev,
+        player: {
+          ...prev.player,
+          xp: newXp,
+          level: newLevel,
+          completedQuests: [...prev.player.completedQuests, prev.currentQuest.id],
+        },
+        currentQuest: getRandomQuest([...prev.player.completedQuests, prev.currentQuest.id]),
+        world: reduceCorruption(prev.world),
+      };
+      saveGameState(newState);
+      return newState;
+    });
+  }, [gameState]);
+
+  const handleObjectComplete = useCallback(() => {
+    if (!gameState?.currentQuest || gameState.currentQuest.type !== 'object') return;
+    setGameState(prev => {
+      if (!prev || !prev.currentQuest || prev.currentQuest.type !== 'object') return prev;
+      const newXp = prev.player.xp + prev.currentQuest.xpReward;
+      const newLevel = calculateLevel(newXp);
+      setQuestMessage(`Found it! +${prev.currentQuest.xpReward} XP`);
+      const newState = {
+        ...prev,
+        player: {
+          ...prev.player,
+          xp: newXp,
+          level: newLevel,
+          completedQuests: [...prev.player.completedQuests, prev.currentQuest.id],
+        },
+        currentQuest: getRandomQuest([...prev.player.completedQuests, prev.currentQuest.id]),
+        world: reduceCorruption(prev.world),
+      };
+      saveGameState(newState);
+      return newState;
+    });
+  }, [gameState]);
+
   const skipQuest = useCallback(() => {
     if (!gameState?.currentQuest) return;
     setGameState(prev => {
@@ -384,6 +432,8 @@ export default function Home() {
     travel: { label: 'TRAVERSE', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.4)' },
     photo:  { label: 'CAPTURE',  color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.4)' },
     wait:   { label: 'MEDITATE', color: '#06b6d4', bg: 'rgba(6,182,212,0.1)',  border: 'rgba(6,182,212,0.4)' },
+    meditate: { label: 'MEDITATE', color: '#06b6d4', bg: 'rgba(6,182,212,0.1)',  border: 'rgba(6,182,212,0.4)' },
+    object: { label: 'FIND', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.4)' },
   }[gameState.currentQuest.type];
 
   // ── Main game render ────────────────────────────────────────
@@ -637,6 +687,20 @@ export default function Home() {
                       <p style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px' }}>
                         Leave the app for 5+ minutes, then return to claim your reward.
                       </p>
+                    )}
+
+                    {gameState.currentQuest.type === 'meditate' && (
+                      <PoseDetection
+                        duration={gameState.currentQuest.goal}
+                        onComplete={handleMeditateComplete}
+                      />
+                    )}
+
+                    {gameState.currentQuest.type === 'object' && (
+                      <ObjectDetection
+                        targetObject={gameState.currentQuest.targetObject || 'tree'}
+                        onComplete={handleObjectComplete}
+                      />
                     )}
                   </div>
                 ) : (
