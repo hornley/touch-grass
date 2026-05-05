@@ -819,25 +819,7 @@ export default function Home() {
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-
-              {/* ── Player card ─── */}
-              <div className="rune-panel" style={{ padding: '20px' }}>
-                <SectionHeader label="TERRAQUEST" />
-
-                <div className="xp-bar xp-bar--mini" style={{ marginBottom: '12px' }}>
-                  <div className="xp-bar__fill" style={{ width: `${Math.min(100, Math.max(0, xpProgress * 100))}%` }} />
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontSize: '10px', color: '#6a8898', letterSpacing: '1px' }}>
-                    {gameState.player.xp} XP &nbsp;·&nbsp; NEXT {xpForNextLevel} XP
-                    {gameState.player.level >= 3 && (
-                      <span style={{ color: '#d4a030' }}> &nbsp;·&nbsp; ×{getQuestXpMultiplier(gameState.player.level).toFixed(1)} BONUS</span>
-                    )}
-                  </span>
-                </div>
-              </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
               {/* ── Quest card ─── */}
               <div key={gameState.currentQuest?.id} className="rune-panel animate-quest" style={{ padding: '20px' }}>
@@ -973,82 +955,6 @@ export default function Home() {
                     <p style={{
                       fontSize: '10px', color: '#3a4e60', marginTop: '8px',
                     }}>Complete current quest to receive next</p>
-                  </div>
-                )}
-              </div>
-
-              {/* ── Location card ─── */}
-              <div className="rune-panel" style={{ padding: '16px 20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px', color: '#7a9aac' }}>
-                      COORDINATES
-                    </span>
-                    {isTracking && (
-                      <span style={{
-                        fontFamily: 'var(--font-cinzel)', fontSize: '8px', letterSpacing: '2px',
-                        color: '#4ade80', background: 'rgba(74,222,128,0.1)',
-                        border: '1px solid rgba(74,222,128,0.4)', padding: '2px 8px',
-                      }}>
-                        ● GPS ACTIVE
-                      </span>
-                    )}
-                  </div>
-                  {location && (
-                    <span style={{ fontFamily: 'var(--font-inconsolata, monospace)', fontSize: '12px', color: '#85a885' }}>
-                      {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
-                    </span>
-                  )}
-                </div>
-                {(isLoading || error || !location) && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    marginTop: '8px', padding: '8px 0',
-                  }}>
-                    {isLoading ? (
-                      <>
-                        <span className="animate-spin-compass" style={{ fontSize: '14px', color: '#d4a030' }}>◐</span>
-                        <span style={{ fontSize: '11px', color: '#d4a030', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>ACQUIRING SIGNAL</span>
-                      </>
-                    ) : error ? (
-                      <>
-                        <span style={{ fontSize: '14px', color: '#ef4444' }}>⚠</span>
-                        <span style={{ fontSize: '11px', color: '#ef4444', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>{error.toUpperCase()}</span>
-                      </>
-                    ) : location ? (
-                      <>
-                        {isTracking && (
-                          <span style={{ fontSize: '14px', color: '#4ade80', marginRight: '6px' }}>●</span>
-                        )}
-                        <span style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px' }}>
-                          {isTracking && cumulativeDistance > 0
-                            ? `TRACKING: ${Math.round(cumulativeDistance)} M`
-                            : location.lat.toFixed(5) + ', ' + location.lng.toFixed(5)}
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <span className="animate-flicker" style={{ fontSize: '14px', color: '#4e6878' }}>◦</span>
-                        <span style={{ fontSize: '11px', color: '#4e6878', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>AWAITING SIGNAL</span>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                {/* Normal state: still show tracking distance if active */}
-                {!isLoading && !error && location && (
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: '8px',
-                    marginTop: '8px', padding: '8px 0',
-                  }}>
-                    {isTracking && (
-                      <span style={{ fontSize: '14px', color: '#4ade80', marginRight: '6px' }}>●</span>
-                    )}
-                    <span style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px' }}>
-                      {isTracking
-                        ? `TRACKING: ${Math.round(cumulativeDistance)} M`
-                        : location.lat.toFixed(5) + ', ' + location.lng.toFixed(5)}
-                    </span>
                   </div>
                 )}
               </div>
