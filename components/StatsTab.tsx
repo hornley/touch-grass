@@ -75,10 +75,18 @@ export function StatsTab({ gameState }: { gameState: GameState }) {
 
       {recent.length === 0 ? (
         <div style={{
-          fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px',
-          color: '#4e6878', textAlign: 'center', padding: '32px',
+          textAlign: 'center', padding: '32px',
+          border: '1px dashed #2a3d52', borderRadius: '4px',
+          background: 'rgba(23,32,48,0.3)',
         }}>
-          NO SESSIONS RECORDED
+          <div style={{ fontSize: '24px', marginBottom: '10px', opacity: 0.4 }}>◈</div>
+          <div style={{
+            fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px',
+            color: '#4e6878', marginBottom: '6px',
+          }}>NO SESSIONS RECORDED</div>
+          <div style={{ fontSize: '10px', color: '#3a4e60' }}>
+            Complete quests to build your log
+          </div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

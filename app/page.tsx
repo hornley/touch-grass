@@ -697,7 +697,20 @@ export default function Home() {
                     )}
                   </div>
                 ) : (
-                  <p style={{ fontSize: '12px', color: '#4e6878', letterSpacing: '2px' }}>NO ACTIVE QUEST</p>
+                  <div style={{
+                    textAlign: 'center', padding: '20px',
+                    border: '1px dashed #2a3d52', borderRadius: '4px',
+                    background: 'rgba(23,32,48,0.3)',
+                  }}>
+                    <div style={{ fontSize: '24px', marginBottom: '8px', opacity: 0.4 }}>⬡</div>
+                    <p style={{
+                      fontFamily: 'var(--font-cinzel)', fontSize: '10px',
+                      letterSpacing: '3px', color: '#4e6878',
+                    }}>NO ACTIVE QUEST</p>
+                    <p style={{
+                      fontSize: '10px', color: '#3a4e60', marginTop: '8px',
+                    }}>Complete current quest to receive next</p>
+                  </div>
                 )}
               </div>
 
@@ -714,12 +727,36 @@ export default function Home() {
                   )}
                 </div>
                 {(isLoading || error || distanceFromLast !== null || !location) && (
-                  <p style={{ fontSize: '11px', color: '#4e6878', letterSpacing: '1px', marginTop: '6px' }}>
-                    {isLoading ? 'ACQUIRING SIGNAL...'
-                      : error ? error.toUpperCase()
-                      : distanceFromLast !== null ? `${distanceFromLast > 100 ? '✦' : '◦'} ${Math.round(distanceFromLast)} M FROM LAST POSITION`
-                      : 'AWAITING SIGNAL'}
-                  </p>
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    marginTop: '8px', padding: '8px 0',
+                  }}>
+                    {isLoading ? (
+                      <>
+                        <span className="animate-spin-compass" style={{ fontSize: '14px', color: '#d4a030' }}>◐</span>
+                        <span style={{ fontSize: '11px', color: '#d4a030', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>ACQUIRING SIGNAL</span>
+                      </>
+                    ) : error ? (
+                      <>
+                        <span style={{ fontSize: '14px', color: '#ef4444' }}>⚠</span>
+                        <span style={{ fontSize: '11px', color: '#ef4444', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>{error.toUpperCase()}</span>
+                      </>
+                    ) : distanceFromLast !== null ? (
+                      <>
+                        <span style={{ fontSize: '14px', color: distanceFromLast > 100 ? '#85a885' : '#4e6878' }}>
+                          {distanceFromLast > 100 ? '✦' : '◦'}
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px' }}>
+                          {Math.round(distanceFromLast)} M FROM LAST POSITION
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="animate-flicker" style={{ fontSize: '14px', color: '#4e6878' }}>◦</span>
+                        <span style={{ fontSize: '11px', color: '#4e6878', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>AWAITING SIGNAL</span>
+                      </>
+                    )}
+                  </div>
                 )}
               </div>
 
