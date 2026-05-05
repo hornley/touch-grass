@@ -528,26 +528,78 @@ export default function Home() {
             {true && (
               <div style={{
                 background: '#111820', border: '1px solid #92400e',
-                padding: '10px 14px', marginBottom: '14px',
+                padding: '12px 14px', marginBottom: '14px',
                 fontFamily: 'var(--font-inconsolata, monospace)',
               }}>
-                <div style={{ fontSize: '9px', letterSpacing: '3px', color: '#a05020', marginBottom: '8px' }}>
+                <div style={{ fontSize: '9px', letterSpacing: '3px', color: '#a05020', marginBottom: '10px' }}>
                   ⚠ DEBUG TERMINAL
                 </div>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
+
+                {/* Player state */}
+                <div style={{ fontSize: '10px', color: '#6a8898', marginBottom: '10px', padding: '8px', background: '#0d1520', borderRadius: '4px' }}>
+                  <div style={{ display: 'flex', gap: '16px', marginBottom: '4px' }}>
+                    <span>XP: <span style={{ color: '#d4a030' }}>{gameState.player.xp}</span></span>
+                    <span>LVL: <span style={{ color: '#d4a030' }}>{gameState.player.level}</span></span>
+                    <span>STREAK: <span style={{ color: '#f59e0b' }}>{gameState.player.streak}</span></span>
+                  </div>
+                  <div>
+                    CORRUPTION: <span style={{ color: gameState.world.corruption > 50 ? '#ef4444' : '#4ade80' }}>{gameState.world.corruption}%</span>
+                  </div>
+                </div>
+
+                {/* Current quest */}
+                <div style={{ fontSize: '10px', color: '#4e6878', marginBottom: '8px' }}>
+                  CURRENT: {gameState.currentQuest ? (
+                    <span style={{ color: '#d4bc8a' }}>{gameState.currentQuest.type} ({gameState.currentQuest.xpReward}xp)</span>
+                  ) : (
+                    <span style={{ color: '#ef4444' }}>NONE</span>
+                  )}
+                </div>
+
+                {/* Quest pool */}
+                <div style={{ fontSize: '9px', color: '#4e6878', marginBottom: '10px' }}>
+                  QUEST POOL:
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px', maxHeight: '100px', overflowY: 'auto' }}>
+                  {QUEST_POOL.map(q => {
+                    const isCompleted = gameState.player.completedQuests.includes(q.id);
+                    const canPlay = (q.minLevel ?? 1) <= gameState.player.level;
+                    return (
+                      <button
+                        key={q.id}
+                        onClick={() => {
+                          if (!isCompleted && canPlay) {
+                            setGameState(prev => {
+                              if (!prev) return prev;
+                              const s = { ...prev, currentQuest: { ...q, status: 'active' as const, progress: 0 } };
+                              saveGameState(s); return s;
+                            });
+                          }
+                        }}
+                        disabled={isCompleted || !canPlay}
+                        style={{
+                          fontSize: '9px', padding: '3px 8px',
+                          color: isCompleted ? '#3a4e60' : canPlay ? '#6a8898' : '#3a4e60',
+                          background: isCompleted ? 'transparent' : canPlay ? '#1e2e3e' : 'transparent',
+                          border: `1px solid ${isCompleted ? '#1e2e3e' : canPlay ? '#2a3d52' : '#1e2e3e'}`,
+                          cursor: isCompleted || !canPlay ? 'default' : 'pointer',
+                          textDecoration: isCompleted ? 'line-through' : 'none',
+                        }}
+                      >
+                        {q.type}:{q.xpReward}{q.minLevel ? ` L${q.minLevel}` : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: '8px' }}>
                   <button onClick={skipQuest} style={{ fontSize: '10px', color: '#93c5fd', background: 'none', border: '1px solid #1e3a5f', padding: '4px 12px', cursor: 'pointer', fontFamily: 'var(--font-cinzel)' }}>
                     SKIP QUEST
                   </button>
                   <button onClick={resetGame} style={{ fontSize: '10px', color: '#fca5a5', background: 'none', border: '1px solid #5f1e1e', padding: '4px 12px', cursor: 'pointer', fontFamily: 'var(--font-cinzel)' }}>
                     RESET GAME
                   </button>
-                </div>
-                <div style={{ fontSize: '10px', color: '#4e6878' }}>
-                  {QUEST_POOL.map(q => (
-                    <span key={q.id} style={{ marginRight: '8px' }}>
-                      [{q.type}:{q.xpReward}{q.minLevel ? ` lv${q.minLevel}+` : ''}]
-                    </span>
-                  ))}
                 </div>
               </div>
             )}
