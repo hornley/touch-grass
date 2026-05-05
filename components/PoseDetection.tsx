@@ -86,10 +86,17 @@ export function PoseDetection({ onComplete, duration }: PoseDetectionProps) {
 
   if (error) {
     return (
-      <div className="p-4 bg-red-900 rounded-lg text-center">
-        <p className="text-white">{error}</p>
-        <button onClick={startCamera} className="mt-2 bg-red-700 text-white px-4 py-2 rounded">
-          Retry
+      <div style={{
+        padding: '16px', background: '#2a1a1a', border: '1px solid #7f1d1d',
+        borderRadius: '4px', textAlign: 'center', marginTop: '12px',
+      }}>
+        <p style={{ color: '#fca5a5', fontSize: '12px' }}>{error}</p>
+        <button onClick={startCamera} style={{
+          marginTop: '10px', fontFamily: 'var(--font-cinzel)', fontSize: '10px',
+          letterSpacing: '2px', color: '#d4a030', background: 'none',
+          border: '1px solid #d4a030', padding: '8px 20px', cursor: 'pointer',
+        }}>
+          RETRY
         </button>
       </div>
     );
@@ -100,15 +107,25 @@ export function PoseDetection({ onComplete, duration }: PoseDetectionProps) {
       <button
         onClick={startCamera}
         disabled={isStarting}
-        className="bg-purple-600 text-white px-6 py-3 rounded-lg text-lg font-semibold disabled:bg-gray-500"
+        style={{
+          fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px',
+          color: isStarting ? '#3d4f60' : '#d4a030',
+          background: 'none',
+          border: `1px solid ${isStarting ? '#1c2c3c' : '#d4a030'}`,
+          padding: '12px 24px', cursor: isStarting ? 'default' : 'pointer',
+          transition: 'all 0.2s', width: '100%',
+        }}
       >
-        {isStarting ? 'Opening...' : 'Start Meditation'}
+        {isStarting ? 'INITIALIZING...' : '◈ BEGIN MEDITATION'}
       </button>
     );
   }
 
   return (
-    <div className="relative rounded-lg overflow-hidden">
+    <div style={{
+      position: 'relative', border: '1px solid #2a3d52', overflow: 'hidden',
+      background: '#172030', marginTop: '12px',
+    }}>
       <video
         ref={videoRef}
         autoPlay
@@ -116,32 +133,77 @@ export function PoseDetection({ onComplete, duration }: PoseDetectionProps) {
         muted
         loop
         webkit-playsinline="true"
-        className="w-full"
-        style={{ minHeight: '300px', backgroundColor: '#000' }}
+        style={{ width: '100%', display: 'block', background: '#000', minHeight: '240px' }}
       />
 
-      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
-        <div className="text-center bg-black/60 rounded-xl p-4 backdrop-blur-sm">
-          <div className="text-5xl font-bold text-white mb-1">{Math.floor(progress)}s</div>
-          <p className="text-gray-300 text-sm mb-3">of {duration}s</p>
+      {/* Timer at top */}
+      <div style={{
+        position: 'absolute', top: 0, left: 0, right: 0,
+        padding: '12px 16px',
+        background: 'linear-gradient(180deg, rgba(13,21,32,0.9) 0%, transparent 100%)',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <span style={{
+            fontFamily: 'var(--font-cinzel)', fontSize: '24px', fontWeight: 900,
+            color: '#d4a030', letterSpacing: '1px',
+          }}>
+            {duration - Math.floor(progress)}
+          </span>
+          <span style={{
+            fontFamily: 'var(--font-cinzel)', fontSize: '8px', letterSpacing: '2px',
+            color: '#6a8898',
+          }}>
+            SEC
+          </span>
+        </div>
+        <div style={{
+          flex: 1, height: '4px', background: '#172030', border: '1px solid #2a3d52',
+          marginLeft: '16px', overflow: 'hidden',
+        }}>
+          <div style={{
+            height: '100%',
+            width: `${Math.min(100, (progress / duration) * 100)}%`,
+            background: 'linear-gradient(90deg, #1e3a2a, #d4a030)',
+            transition: 'width 0.3s ease',
+          }} />
+        </div>
+      </div>
 
-          <div className="w-48 bg-gray-700 rounded-full h-3 mb-3">
-            <div
-              className="bg-gradient-to-r from-purple-400 to-purple-600 h-3 rounded-full"
-              style={{ width: `${Math.min(100, (progress / duration) * 100)}%` }}
-            />
-          </div>
-
-          <div className="flex justify-center gap-3">
-            <div className={`px-3 py-1 rounded-lg ${status === 'yoga' ? 'bg-green-600' : 'bg-gray-600'}`}>
-              <span className="text-xl">🧘</span>
-              <p className="text-xs text-white">{status === 'yoga' ? 'Yoga Pose' : 'Not detected'}</p>
-            </div>
-            <div className={`px-3 py-1 rounded-lg ${score > 50 ? 'bg-green-600' : 'bg-gray-600'}`}>
-              <span className="text-xl">📊</span>
-              <p className="text-xs text-white">{score.toFixed(0)}%</p>
-            </div>
-          </div>
+      {/* Status at bottom */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0,
+        padding: '12px 16px',
+        background: 'linear-gradient(0deg, rgba(13,21,32,0.9) 0%, transparent 100%)',
+        display: 'flex', justifyContent: 'center', gap: '12px',
+      }}>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '6px 12px', borderRadius: '4px',
+          border: `1px solid ${status === 'yoga' ? '#2d6e48' : '#2a3d52'}`,
+          background: status === 'yoga' ? 'rgba(45,110,72,0.15)' : 'transparent',
+        }}>
+          <span style={{ fontSize: '14px' }}>🧘</span>
+          <span style={{
+            fontFamily: 'var(--font-cinzel)', fontSize: '8px', letterSpacing: '2px',
+            color: status === 'yoga' ? '#4ade80' : '#4e6878',
+          }}>
+            {status === 'yoga' ? 'YOGA' : 'NONE'}
+          </span>
+        </div>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '6px',
+          padding: '6px 12px', borderRadius: '4px',
+          border: `1px solid ${score > 50 ? '#2d6e48' : '#2a3d52'}`,
+          background: score > 50 ? 'rgba(45,110,72,0.15)' : 'transparent',
+        }}>
+          <span style={{ fontSize: '14px' }}>⚡</span>
+          <span style={{
+            fontFamily: 'var(--font-cinzel)', fontSize: '8px', letterSpacing: '2px',
+            color: score > 50 ? '#4ade80' : '#4e6878',
+          }}>
+            {score.toFixed(0)}%
+          </span>
         </div>
       </div>
     </div>
