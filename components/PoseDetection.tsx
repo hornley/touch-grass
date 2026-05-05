@@ -108,34 +108,41 @@ export function PoseDetection({ onComplete, duration }: PoseDetectionProps) {
   }
 
   return (
-    <div className="space-y-4">
-      <video ref={videoRef} autoPlay playsInline muted loop webkit-playsinline="true" className="hidden" />
+    <div className="relative rounded-lg overflow-hidden">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        loop
+        webkit-playsinline="true"
+        className="w-full"
+        style={{ minHeight: '300px', backgroundColor: '#000' }}
+      />
 
-      <div className="text-center">
-        <div className="text-5xl font-bold mb-2">{Math.floor(progress)}s</div>
-        <p className="text-gray-400 mb-4">of {duration}s meditation</p>
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50">
+        <div className="text-center bg-black/60 rounded-xl p-4 backdrop-blur-sm">
+          <div className="text-5xl font-bold text-white mb-1">{Math.floor(progress)}s</div>
+          <p className="text-gray-300 text-sm mb-3">of {duration}s</p>
 
-        <div className="w-full bg-gray-700 rounded-full h-4 mb-4">
-          <div
-            className="bg-gradient-to-r from-purple-500 to-purple-700 h-4 rounded-full"
-            style={{ width: `${Math.min(100, (progress / duration) * 100)}%` }}
-          />
-        </div>
-
-        <div className="flex justify-center gap-4 mb-4">
-          <div className={`px-4 py-2 rounded-lg ${status === 'sitting' ? 'bg-green-600' : 'bg-gray-700'}`}>
-            <span className="text-2xl">🧘</span>
-            <p className="text-sm">Sitting</p>
+          <div className="w-48 bg-gray-700 rounded-full h-3 mb-3">
+            <div
+              className="bg-gradient-to-r from-purple-400 to-purple-600 h-3 rounded-full"
+              style={{ width: `${Math.min(100, (progress / duration) * 100)}%` }}
+            />
           </div>
-          <div className={`px-4 py-2 rounded-lg ${score > 50 ? 'bg-green-600' : 'bg-gray-700'}`}>
-            <span className="text-2xl">📊</span>
-            <p className="text-sm">{score.toFixed(0)}%</p>
+
+          <div className="flex justify-center gap-3">
+            <div className={`px-3 py-1 rounded-lg ${status === 'yoga' ? 'bg-green-600' : 'bg-gray-600'}`}>
+              <span className="text-xl">🧘</span>
+              <p className="text-xs text-white">{status === 'yoga' ? 'Yoga Pose' : 'Not detected'}</p>
+            </div>
+            <div className={`px-3 py-1 rounded-lg ${score > 50 ? 'bg-green-600' : 'bg-gray-600'}`}>
+              <span className="text-xl">📊</span>
+              <p className="text-xs text-white">{score.toFixed(0)}%</p>
+            </div>
           </div>
         </div>
-
-        <p className="text-gray-500 text-sm">
-          Keep your face visible in the camera
-        </p>
       </div>
     </div>
   );

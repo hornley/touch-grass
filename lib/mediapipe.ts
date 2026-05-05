@@ -16,8 +16,8 @@ export async function initPoseLandmarker(): Promise<PoseLandmarker> {
 
   poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
     baseOptions: {
-      modelAssetPath: 'https://storage.googleapis.com/mediapipe-assets/pose_landmarker_lite.task',
-      delegate: 'GPU',
+      modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+      delegate: 'CPU',
     },
     runningMode: 'VIDEO',
     numPoses: 1,
@@ -95,7 +95,7 @@ export interface MeditationAnalysis {
   sitting: number;
   stillness: number;
   score: number;
-  status: 'sitting' | 'standing' | 'unknown';
+  status: 'yoga' | 'not-yoga' | 'unknown';
 }
 
 export function analyzeMeditation(landmarks: { x: number; y: number; z: number }[]): MeditationAnalysis {
@@ -108,24 +108,38 @@ export function analyzeMeditation(landmarks: { x: number; y: number; z: number }
   const rightShoulder = landmarks[12];
   const leftHip = landmarks[23];
   const rightHip = landmarks[24];
+  const leftKnee = landmarks[25];
+  const rightKnee = landmarks[26];
+  const leftAnkle = landmarks[27];
+  const rightAnkle = landmarks[28];
 
   const shoulderMidY = (leftShoulder.y + rightShoulder.y) / 2;
   const hipMidY = (leftHip.y + rightHip.y) / 2;
-  const torsoLength = hipMidY - shoulderMidY;
+  const kneeMidY = (leftKnee.y + rightKnee.y) / 2;
+  const ankleMidY = (leftAnkle.y + rightAnkle.y) / 2;
 
   const shoulderWidth = Math.abs(rightShoulder.x - leftShoulder.x);
-  const torsoRatio = torsoLength > 0 ? shoulderWidth / torsoLength : 0;
+  const hipWidth = Math.abs(rightHip.x - leftHip.x);
+  const kneeWidth = Math.abs(rightKnee.x - leftKnee.x);
 
-  const sittingScore = torsoRatio > 0.4 && torsoRatio < 1.2 ? Math.min(1, torsoRatio / 0.6) : 0;
+  const shoulderSymmetry = 1 - Math.abs(leftShoulder.y - rightShoulder.y);
+  const hipSymmetry = 1 - Math.abs(leftHip.y - rightHip.y);
 
-  const headY = nose.y;
-  const isUpright = headY > shoulderMidY - 0.15 && headY < shoulderMidY + 0.1;
+  const torsoLength = hipMidY - shoulderMidY;
+  const legLength = ankleMidY - kneeMidY;
 
-  const sitting = Math.min(1, (sittingScore + (isUpright ? 0.5 : 0)) / 1.5);
+  const isUpright = nose.y < shoulderMidY && shoulderMidY < hipMidY;
+  const isBalanced = shoulderSymmetry > 0.8 && hipSymmetry > 0.8;
+  
+  const legSpread = kneeWidth > hipWidth * 0.5;
+  
+  const yogaScore = (isUpright ? 0.4 : 0) + (isBalanced ? 0.4 : 0) + (legSpread ? 0.2 : 0);
+  
+  const sitting = Math.min(1, yogaScore);
   const stillness = 0.7;
 
   const score = sitting * 0.6 + stillness * 0.4;
-  const status: 'sitting' | 'standing' | 'unknown' = sitting > 0.5 ? 'sitting' : 'standing';
+  const status: 'yoga' | 'not-yoga' | 'unknown' = score > 40 ? 'yoga' : 'not-yoga';
 
   return {
     sitting: sitting * 100,
