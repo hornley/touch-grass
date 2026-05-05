@@ -3,9 +3,10 @@ import { useState, useRef, useEffect } from 'react';
 
 interface CameraCaptureProps {
   onCapture: () => void;
+  disabled?: boolean;
 }
 
-export function CameraCapture({ onCapture }: CameraCaptureProps) {
+export function CameraCapture({ onCapture, disabled = false }: CameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [, setCameraError] = useState<string | null>(null);
@@ -42,16 +43,21 @@ export function CameraCapture({ onCapture }: CameraCaptureProps) {
 
   if (showFallback) {
     return (
-      <label style={{ display: 'inline-block', cursor: 'pointer' }}>
+      <label style={{ display: 'inline-block', cursor: disabled ? 'default' : 'pointer' }}>
         <span style={{
           display: 'inline-block',
           fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px',
-          color: '#8a9aac', border: '1px solid #1c2c3c', padding: '10px 20px',
+          color: disabled ? '#3d4f60' : '#8a9aac',
+          border: '1px solid #1c2c3c',
+          padding: '10px 20px',
         }}>
           ◈ UPLOAD PHOTO
         </span>
-        <input type="file" accept="image/*" className="hidden"
-          onChange={(e) => { if (e.target.files?.length) onCapture(); }} />
+        <input type="file" accept="image/*" className="hidden" disabled={disabled}
+          onChange={(e) => {
+            if (disabled) return;
+            if (e.target.files?.length) onCapture();
+          }} />
       </label>
     );
   }
@@ -60,17 +66,17 @@ export function CameraCapture({ onCapture }: CameraCaptureProps) {
     return (
       <button
         onClick={startCamera}
-        disabled={isStarting}
+        disabled={isStarting || disabled}
         style={{
           fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px',
-          color: isStarting ? '#3d4f60' : '#d4a030',
+          color: isStarting || disabled ? '#3d4f60' : '#d4a030',
           background: 'none',
-          border: `1px solid ${isStarting ? '#1c2c3c' : '#d4a030'}`,
-          padding: '12px 24px', cursor: isStarting ? 'default' : 'pointer',
+          border: `1px solid ${isStarting || disabled ? '#1c2c3c' : '#d4a030'}`,
+          padding: '12px 24px', cursor: isStarting || disabled ? 'default' : 'pointer',
           transition: 'all 0.2s',
         }}
       >
-        {isStarting ? 'ACCESSING LENS...' : '◈ OPEN LENS'}
+        {disabled ? 'MOVE CLOSER' : isStarting ? 'ACCESSING LENS...' : '◈ OPEN LENS'}
       </button>
     );
   }
@@ -100,11 +106,14 @@ export function CameraCapture({ onCapture }: CameraCaptureProps) {
       <div style={{ display: 'flex', gap: '8px' }}>
         <button
           onClick={capturePhoto}
-          className={stream ? 'animate-pulse-glow' : undefined}
+          className={stream && !disabled ? 'animate-pulse-glow' : undefined}
+          disabled={disabled}
           style={{
             flex: 1, fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px',
-            color: '#d4a030', background: 'rgba(212,160,48,0.07)',
-            border: '1px solid #d4a030', padding: '12px', cursor: 'pointer',
+            color: disabled ? '#3d4f60' : '#d4a030',
+            background: disabled ? 'rgba(61,79,96,0.1)' : 'rgba(212,160,48,0.07)',
+            border: `1px solid ${disabled ? '#1c2c3c' : '#d4a030'}`,
+            padding: '12px', cursor: disabled ? 'default' : 'pointer',
             transition: 'box-shadow 0.3s ease',
           }}
         >
