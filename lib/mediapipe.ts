@@ -139,7 +139,7 @@ export function analyzeMeditation(landmarks: { x: number; y: number; z: number }
   const stillness = 0.7;
 
   const score = sitting * 0.6 + stillness * 0.4;
-  const status: 'yoga' | 'not-yoga' | 'unknown' = score > 40 ? 'yoga' : 'not-yoga';
+  const status: 'yoga' | 'not-yoga' | 'unknown' = score > 50 ? 'yoga' : 'not-yoga';
 
   return {
     sitting: sitting * 100,

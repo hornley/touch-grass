@@ -17,11 +17,9 @@ export interface Player {
   photoQuestsCompleted: number;
 }
 
-export type QuestType = 'travel' | 'photo' | 'wait' | 'meditate' | 'object';
-
 export interface Quest {
   id: string;
-  type: QuestType;
+  type: 'travel' | 'photo' | 'wait' | 'meditate' | 'object';
   status: 'active' | 'completed';
   progress: number;
   goal: number;

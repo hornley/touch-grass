@@ -226,22 +226,18 @@ export default function Home() {
     if (!gameState?.currentQuest || gameState.currentQuest.type !== 'meditate') return;
     setGameState(prev => {
       if (!prev || !prev.currentQuest || prev.currentQuest.type !== 'meditate') return prev;
-      const newXp = prev.player.xp + prev.currentQuest.xpReward;
+      const xp = Math.round(prev.currentQuest.xpReward * getQuestXpMultiplier(prev.player.level));
+      const newXp = prev.player.xp + xp;
       const newLevel = calculateLevel(newXp);
-      setQuestMessage(`Meditation complete! +${prev.currentQuest.xpReward} XP`);
-      const newState = {
+      setQuestMessage(`CENTERED  ·  +${xp} XP`);
+      const completedIds = [...prev.player.completedQuests, prev.currentQuest.id];
+      const newState: GameState = {
         ...prev,
-        player: {
-          ...prev.player,
-          xp: newXp,
-          level: newLevel,
-          completedQuests: [...prev.player.completedQuests, prev.currentQuest.id],
-        },
-        currentQuest: getRandomQuest([...prev.player.completedQuests, prev.currentQuest.id]),
+        player: { ...prev.player, xp: newXp, level: newLevel, completedQuests: completedIds },
+        currentQuest: getRandomQuest(completedIds, newLevel),
         world: reduceCorruption(prev.world),
       };
-      saveGameState(newState);
-      return newState;
+      saveGameState(newState); return newState;
     });
   }, [gameState]);
 
@@ -249,22 +245,18 @@ export default function Home() {
     if (!gameState?.currentQuest || gameState.currentQuest.type !== 'object') return;
     setGameState(prev => {
       if (!prev || !prev.currentQuest || prev.currentQuest.type !== 'object') return prev;
-      const newXp = prev.player.xp + prev.currentQuest.xpReward;
+      const xp = Math.round(prev.currentQuest.xpReward * getQuestXpMultiplier(prev.player.level));
+      const newXp = prev.player.xp + xp;
       const newLevel = calculateLevel(newXp);
-      setQuestMessage(`Found it! +${prev.currentQuest.xpReward} XP`);
-      const newState = {
+      setQuestMessage(`DISCOVERED  ·  +${xp} XP`);
+      const completedIds = [...prev.player.completedQuests, prev.currentQuest.id];
+      const newState: GameState = {
         ...prev,
-        player: {
-          ...prev.player,
-          xp: newXp,
-          level: newLevel,
-          completedQuests: [...prev.player.completedQuests, prev.currentQuest.id],
-        },
-        currentQuest: getRandomQuest([...prev.player.completedQuests, prev.currentQuest.id]),
+        player: { ...prev.player, xp: newXp, level: newLevel, completedQuests: completedIds },
+        currentQuest: getRandomQuest(completedIds, newLevel),
         world: reduceCorruption(prev.world),
       };
-      saveGameState(newState);
-      return newState;
+      saveGameState(newState); return newState;
     });
   }, [gameState]);
 
@@ -432,8 +424,8 @@ export default function Home() {
     travel: { label: 'TRAVERSE', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.4)' },
     photo:  { label: 'CAPTURE',  color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.4)' },
     wait:   { label: 'MEDITATE', color: '#06b6d4', bg: 'rgba(6,182,212,0.1)',  border: 'rgba(6,182,212,0.4)' },
-    meditate: { label: 'MEDITATE', color: '#06b6d4', bg: 'rgba(6,182,212,0.1)',  border: 'rgba(6,182,212,0.4)' },
-    object: { label: 'FIND', color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.4)' },
+    meditate:{ label: 'YOGA',    color: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.4)' },
+    object: { label: 'FIND',    color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.4)' },
   }[gameState.currentQuest.type];
 
   // ── Main game render ────────────────────────────────────────
