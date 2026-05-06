@@ -27,7 +27,7 @@ let lastSmoothedDelta = 0;
 
 // Hysteresis state machine
 let hysteresisState: MotionState = 'idle';
-let movementHistory: boolean[] = [false, false, false]; // Last 3 ticks
+const movementHistory: boolean[] = [false, false, false]; // Last 3 ticks
 
 const ALPHA = 0.35;
 const MAX_DELTA = 10;
@@ -153,7 +153,6 @@ export function createSlidingWindowTracker(): SlidingWindowTracker {
     }
 
     const gpsSpeed = windowDuration > 0 ? computeSpeed(windowDistance, windowDuration) : 0;
-    const movementState = deriveMotionState(gpsSpeed);
 
     // Get recent metrics for responsive state
     const { recentSpeed, recentState } = computeRecentMetrics(validPoints);
