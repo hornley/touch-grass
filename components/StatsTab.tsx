@@ -1,5 +1,5 @@
 'use client';
-import { GameState } from '@/lib/types';
+import { GameState, QuestHistoryEntry } from '@/lib/types';
 import { QUEST_POOL } from '@/lib/game';
 
 function fmt(ms: number): string {
@@ -15,6 +15,12 @@ function fmtDate(ts: number): string {
     .toUpperCase();
 }
 
+function fmtTime(ts: number): string {
+  return new Date(ts)
+    .toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    .toUpperCase();
+}
+
 function Row({ label, value }: { label: string; value: string | number }) {
   return (
     <div style={{
@@ -27,6 +33,69 @@ function Row({ label, value }: { label: string; value: string | number }) {
       <span style={{
         fontFamily: 'var(--font-cinzel)', fontSize: '12px', color: '#ead7a0',
       }}>{value}</span>
+    </div>
+  );
+}
+
+const TYPE_ICONS: Record<string, string> = {
+  travel: '↝',
+  photo: '◉',
+  visit: '◎',
+  meditate: '◈',
+  object: '◇',
+  wait: '○',
+};
+
+function QuestHistoryList({ history }: { history: QuestHistoryEntry[] }) {
+  if (!history || history.length === 0) {
+    return (
+      <div style={{
+        textAlign: 'center', padding: '32px',
+        border: '1px dashed #2a3d52', borderRadius: '4px',
+        background: 'rgba(23,32,48,0.3)',
+      }}>
+        <div style={{ fontSize: '24px', marginBottom: '10px', opacity: 0.4 }}>◇</div>
+        <div style={{
+          fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px',
+          color: '#4e6878', marginBottom: '6px',
+        }}>NO QUESTS RECORDED</div>
+        <div style={{ fontSize: '10px', color: '#3a4e60' }}>
+          Complete quests to fill your chronicle
+        </div>
+      </div>
+    );
+  }
+
+  const reversed = [...history].reverse();
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', paddingBottom: '80px' }}>
+      {reversed.map((entry, i) => (
+        <div key={i} className="rune-panel" style={{
+          padding: '10px 14px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{
+              fontFamily: 'var(--font-cinzel)', fontSize: '10px',
+              color: '#ead7a0', letterSpacing: '1px', marginBottom: '2px',
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>
+              {TYPE_ICONS[entry.type] || '○'} {entry.description}
+            </div>
+            <div style={{ fontSize: '10px', color: '#4e6878' }}>
+              {fmtDate(entry.timestamp)} @ {fmtTime(entry.timestamp)}
+              {entry.chainId && entry.chainStep && ` • step ${entry.chainStep}`}
+            </div>
+          </div>
+          <div style={{
+            fontFamily: 'var(--font-cinzel)', fontSize: '12px',
+            color: '#d4a030', marginLeft: '12px', flexShrink: 0,
+          }}>
+            +{entry.xpEarned}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -63,12 +132,20 @@ export function StatsTab({ gameState }: { gameState: GameState }) {
         <Row label="  ◦ MEDITATE" value={byType.wait} />
         <Row label="DISTANCE WALKED" value={distDisplay} />
         <Row label="CURRENT STREAK"  value={`${player.streak} DAYS`} />
-        <Row label="RANK"            value={`LEVEL ${player.level}`} />
+<Row label="RANK"            value={`LEVEL ${player.level}`} />
         <Row label="TOTAL EXPERIENCE" value={`${player.xp} XP`} />
       </div>
 
+      {/* Quest history */}
+      <div className="section-divider" style={{ marginTop: '20px' }}>
+        <span className="section-divider__label">QUEST HISTORY</span>
+        <div className="section-divider__line" />
+      </div>
+
+      <QuestHistoryList history={player.questHistory} />
+
       {/* Session history */}
-      <div className="section-divider">
+      <div className="section-divider" style={{ marginTop: '20px' }}>
         <span className="section-divider__label">SESSION HISTORY</span>
         <div className="section-divider__line" />
       </div>

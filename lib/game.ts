@@ -1,4 +1,4 @@
-import { ChainState, GameState, Quest } from './types';
+import { ChainState, GameState, Quest, QuestHistoryEntry } from './types';
 
 const STORAGE_KEY = 'terraquest_state';
 
@@ -269,6 +269,7 @@ export function getInitialState(): GameState {
       lastLocation: null,
       lastActive: Date.now(),
       completedQuests: [],
+      questHistory: [],
       streak: 0,
       lastStreakDate: null,
       totalDistance: 0,
@@ -292,6 +293,15 @@ export function loadGameState(): GameState {
     const parsed = JSON.parse(stored);
     if (parsed.world) {
       delete parsed.world;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+      } catch {
+        // Ignore storage write failures during migration and keep the parsed state.
+      }
+    }
+    if (!parsed.player?.questHistory) {
+      parsed.player = parsed.player ?? {};
+      parsed.player.questHistory = [];
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
       } catch {
@@ -392,4 +402,17 @@ export function calculateReturnReward(lastAway: number | null): { minutes: numbe
   const overtime = Math.max(0, minutes - 60);
   const xp = baseMinutes + overtime * 2;
   return { minutes, xp };
+}
+
+const MAX_QUEST_HISTORY = 100;
+
+export function addQuestToHistory(
+  history: QuestHistoryEntry[],
+  entry: QuestHistoryEntry,
+): QuestHistoryEntry[] {
+  const updated = [...history, entry];
+  if (updated.length > MAX_QUEST_HISTORY) {
+    return updated.slice(-MAX_QUEST_HISTORY);
+  }
+  return updated;
 }
