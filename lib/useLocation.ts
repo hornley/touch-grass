@@ -33,7 +33,7 @@ interface UseLocationResult {
   debugInfo: DebugInfo;
 }
 
-const MIN_ACCURACY = 50;
+const MIN_ACCURACY = 150;
 
 function getMultiplier(state: MotionState): number {
   switch (state) {
