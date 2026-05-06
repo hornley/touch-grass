@@ -153,7 +153,8 @@ export async function fetchNearbyPois(lat: number, lng: number, radius: number =
 
   const response = await fetch('https://overpass-api.de/api/interpreter', {
     method: 'POST',
-    body: query,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `data=${encodeURIComponent(query)}`,
   });
 
   if (!response.ok) return [];
