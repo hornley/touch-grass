@@ -151,17 +151,22 @@ export async function fetchNearbyPois(lat: number, lng: number, radius: number =
     out center tags;
   `;
 
-  const response = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    body: query,
-  });
+  try {
+    const response = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(query)}`,
+    });
 
-  if (!response.ok) return [];
-  const data = await response.json();
-  const items = formatPoiResults(data.elements ?? []);
-  const cache: CachedPois = { timestamp: Date.now(), items };
-  localStorage.setItem(cacheKey, JSON.stringify(cache));
-  return items;
+    if (!response.ok) return [];
+    const data = await response.json();
+    const items = formatPoiResults(data.elements ?? []);
+    const cache: CachedPois = { timestamp: Date.now(), items };
+    localStorage.setItem(cacheKey, JSON.stringify(cache));
+    return items;
+  } catch {
+    return [];
+  }
 }
 
 function pickRandom<T>(items: T[]): T {
