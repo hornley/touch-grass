@@ -222,6 +222,31 @@ export default function Home() {
     return () => { document.removeEventListener('visibilitychange', handleVisibilityChange); };
   }, [gameState]);
 
+  // Load session once on mount - calculate distance from saved position when returning
+  useEffect(() => {
+    if (!location) return;
+    
+    const session = loadSession();
+    if (!session.isNewSession && session.sessionData) {
+      const { sessionData, timeAwayMs } = session;
+      if (sessionData.lastLat && sessionData.lastLng && timeAwayMs > 30000) {
+        const distanceFromLast = calculateDistance(
+          sessionData.lastLat,
+          sessionData.lastLng,
+          location.lat,
+          location.lng
+        );
+        if (distanceFromLast > 10) { // 10 meters
+          setGameState(prev => {
+            if (!prev) return prev;
+            const newTotal = prev.player.totalDistance + distanceFromLast;
+            return { ...prev, player: { ...prev.player, totalDistance: newTotal } };
+          });
+        }
+      }
+    }
+  }, [location]); // Only once when location first available
+
   const currentXp = gameState?.player.xp ?? null;
   const currentQuestType = gameState?.currentQuest?.type;
 
