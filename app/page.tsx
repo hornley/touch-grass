@@ -213,17 +213,8 @@ export default function Home() {
 
   useEffect(() => {
     if (!locationEnabled) return;
-
-    if (currentQuestType === 'travel') {
-      if (!isTracking) {
-        setIsTracking(true);
-      }
-    } else {
-      if (isTracking) {
-        setIsTracking(false);
-      }
-    }
-  }, [currentQuestType, locationEnabled, isTracking]);
+    setIsTracking(true);
+  }, [locationEnabled]);
 
   useEffect(() => {
     const now = Date.now();
@@ -233,11 +224,11 @@ export default function Home() {
     lastUpdateRef.current = now;
 
     const quest = gameState.currentQuest;
-    if (!quest || quest.type !== 'travel') return;
+    const isTravelQuest = quest?.type === 'travel';
+    const willComplete = isTravelQuest && quest.progress + distanceFromLast >= quest.goal;
     
-    const willComplete = quest.progress + distanceFromLast >= quest.goal;
-    
-    if (!willComplete) {
+    // Update quest progress for travel quests
+    if (isTravelQuest) {
       setGameState(prev => {
         if (!prev) return prev;
         const newDist = (prev.player.totalDistance ?? 0) + distanceFromLast;
@@ -254,6 +245,21 @@ export default function Home() {
         saveGameState(newState);
         return newState;
       });
+      
+      if (willComplete) {
+        // Quest completed - continue to completion logic
+      } else {
+        return;
+      }
+    } else if (distanceFromLast > 0) {
+      // Non-travel quest, still update total distance
+      setGameState(prev => {
+        if (!prev) return prev;
+        const newDist = (prev.player.totalDistance ?? 0) + distanceFromLast;
+        return { ...prev, player: { ...prev.player, lastLocation: location, lastActive: Date.now(), totalDistance: newDist } };
+      });
+      return;
+    } else {
       return;
     }
 
