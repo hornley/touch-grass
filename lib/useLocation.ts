@@ -21,8 +21,14 @@ interface UseLocationResult {
   error: string | null;
   isLoading: boolean;
   requestLocation: () => Promise<void>;
+  startTracking: () => void;
+  stopTracking: () => void;
+  isTracking: boolean;
+  cumulativeDistance: number;
   lastMovementDistance: number;
   currentAccuracy: number | null;
+  currentSpeed: number | null;
+  currentSegmentDist: number | null;
   motionState: MotionState | null;
   debugInfo: DebugInfo;
 }
@@ -45,8 +51,12 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
   const [location, setLocation] = useState<Location | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isTracking, setIsTracking] = useState(false);
+  const [cumulativeDistance, setCumulativeDistance] = useState(0);
   const [lastMovementDistance, setLastMovementDistance] = useState(0);
   const [currentAccuracy, setCurrentAccuracy] = useState<number | null>(null);
+  const [currentSpeed, setCurrentSpeed] = useState<number | null>(null);
+  const [currentSegmentDist, setCurrentSegmentDist] = useState<number | null>(null);
   const [motionState, setMotionState] = useState<MotionState | null>(null);
 
   const [debugInfo, setDebugInfo] = useState<DebugInfo>({
@@ -95,8 +105,15 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
 
     if (metrics.isValid && progressDelta > 0) {
       setLastMovementDistance(progressDelta);
+      setCurrentSegmentDist(progressDelta);
+      setCurrentSpeed(metrics.gpsSpeed);
+      if (isTracking) {
+        setCumulativeDistance(prev => prev + progressDelta);
+      }
     } else {
       setLastMovementDistance(0);
+      setCurrentSegmentDist(null);
+      setCurrentSpeed(metrics.gpsSpeed > 0 ? metrics.gpsSpeed : null);
     }
 
     setCurrentAccuracy(accuracy);
@@ -106,7 +123,7 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
       lng,
       timestamp,
     });
-  }, []);
+  }, [isTracking]);
 
   const requestLocation = useCallback(async () => {
     setIsLoading(true);
@@ -163,6 +180,17 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
     }
   }, [processLocation]);
 
+  const startTracking = useCallback(() => {
+    setIsTracking(true);
+    if (!location) {
+      void requestLocation();
+    }
+  }, [location, requestLocation]);
+
+  const stopTracking = useCallback(() => {
+    setIsTracking(false);
+  }, []);
+
   const fetchLocation = useCallback(async () => {
     const params = new URLSearchParams(window.location.search);
     const simLat = params.get('lat');
@@ -203,7 +231,7 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
   }, [enabled, location, requestLocation]);
 
   useEffect(() => {
-    if (enabled && location) {
+    if (enabled && isTracking && location) {
       intervalRef.current = window.setInterval(fetchLocation, 5000);
     }
 
@@ -213,15 +241,27 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
         intervalRef.current = null;
       }
     };
-  }, [enabled, location, fetchLocation]);
+  }, [enabled, isTracking, location, fetchLocation]);
+
+  useEffect(() => {
+    if (!enabled) {
+      setIsTracking(false);
+    }
+  }, [enabled]);
 
   return {
     location,
     error,
     isLoading,
     requestLocation,
+    startTracking,
+    stopTracking,
+    isTracking,
+    cumulativeDistance,
     lastMovementDistance,
     currentAccuracy,
+    currentSpeed,
+    currentSegmentDist,
     motionState,
     debugInfo,
   };
