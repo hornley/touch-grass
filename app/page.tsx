@@ -26,6 +26,7 @@ import { BottomNav } from '@/components/BottomNav';
 import { StatsTab } from '@/components/StatsTab';
 import { AchievementsTab } from '@/components/AchievementsTab';
 import { TravelMapWrapper } from '@/components/TravelMapWrapper';
+import VisitQuestMapWrapper from '@/components/VisitQuestMapWrapper';
 
 type Tab = 'home' | 'stats' | 'achievements';
 
@@ -74,6 +75,7 @@ export default function Home() {
   const [isTracking, setIsTracking] = useState(false);
   const pendingCompletion = useRef(false);
   const [visitCapturePending, setVisitCapturePending] = useState(false);
+  const [visitDebugError, setVisitDebugError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [tabFadeKey, setTabFadeKey] = useState(0);
   const [xpSpark, setXpSpark] = useState(false);
@@ -1056,6 +1058,15 @@ export default function Home() {
                             ? 'A nearby location calls to you. Find it within 50 meters and capture proof.'
                             : `Travel within ${gameState.currentQuest.radiusM ?? 50}m of ${gameState.currentQuest.targetName || 'the target'}, then take a photo.`}
                         </p>
+                        {location && gameState.currentQuest.targetLat && gameState.currentQuest.targetLng && (
+                          <VisitQuestMapWrapper
+                            currentLocation={location}
+                            targetLat={gameState.currentQuest.targetLat}
+                            targetLng={gameState.currentQuest.targetLng}
+                            targetName={gameState.currentQuest.targetName || 'Target'}
+                            radiusM={gameState.currentQuest.radiusM ?? 50}
+                          />
+                        )}
                         <CameraCapture onCapture={handlePhotoCapture} disabled={!visitCapturePending} />
                       </div>
                     )}
@@ -1142,6 +1153,68 @@ export default function Home() {
                       );
                     })}
                   </div>
+
+                  {/* VISIT debug button */}
+                  <button
+                    onClick={async () => {
+                      setVisitDebugError(null);
+                      if (!location) {
+                        setVisitDebugError('Need GPS location first');
+                        return;
+                      }
+                      const pois = await fetchNearbyPois(location.lat, location.lng);
+                      if (pois.length === 0) {
+                        setVisitDebugError('No POIs found nearby');
+                        return;
+                      }
+                      const poi = pois[Math.floor(Math.random() * pois.length)];
+                      const quest = {
+                        id: `visit_debug_${Date.now()}`,
+                        type: 'visit' as const,
+                        status: 'active' as const,
+                        progress: 0,
+                        goal: 1,
+                        xpReward: 30,
+                        description: `Visit ${poi.name} and take a photo`,
+                        targetName: poi.name,
+                        targetLat: poi.lat,
+                        targetLng: poi.lng,
+                        radiusM: 50,
+                      };
+                      setGameState(prev => {
+                        if (!prev) return prev;
+                        const s = { ...prev, currentQuest: quest };
+                        saveGameState(s);
+                        return s;
+                      });
+                    }}
+                    style={{
+                      fontSize: '9px', padding: '4px 10px',
+                      color: '#d4a030',
+                      background: 'rgba(212,160,48,0.1)',
+                      border: '1px solid #d4a030',
+                      cursor: 'pointer',
+                      fontFamily: 'var(--font-cinzel)',
+                      letterSpacing: '1px',
+                      marginBottom: '8px',
+                    }}
+                  >
+                    ▼ VISIT DEBUG
+                  </button>
+                  {visitDebugError && (
+                    <div style={{ fontSize: '9px', color: '#ef4444', marginBottom: '8px' }}>
+                      {visitDebugError}
+                    </div>
+                  )}
+                  {gameState.currentQuest?.type === 'visit' && gameState.currentQuest.targetName && (
+                    <div style={{ fontSize: '9px', color: '#d4a030', marginBottom: '8px', padding: '4px', background: '#0d1520', borderRadius: '2px' }}>
+                      TARGET: {gameState.currentQuest.targetName}
+                      <br />
+                      <span style={{ color: '#6a8898' }}>
+                        {gameState.currentQuest.targetLat?.toFixed(5)}, {gameState.currentQuest.targetLng?.toFixed(5)}
+                      </span>
+                    </div>
+                  )}
 
                   {/* GPS debug info */}
                   <div style={{ fontSize: '10px', color: '#4e6878', marginTop: '10px', padding: '8px', background: '#0d1520', borderRadius: '4px' }}>
