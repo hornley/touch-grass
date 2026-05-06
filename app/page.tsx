@@ -76,7 +76,7 @@ export default function Home() {
   const prevXpRef = useRef<number | null>(null);
 
   const lastLocation = gameState?.player.lastLocation ?? null;
-  const { location, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist } = useLocation(lastLocation, locationEnabled);
+  const { location, error, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist } = useLocation(lastLocation, locationEnabled);
   const distanceFromLast = lastMovementDistance;
 
   const lastLocationForQuest = useMemo(() => (location ?? lastLocation)
