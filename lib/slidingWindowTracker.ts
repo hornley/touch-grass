@@ -10,6 +10,9 @@ export interface SlidingWindowMetrics {
   isValid: boolean;
   movementState: MotionState;
   gpsSpeed: number;
+  recentSpeed: number;
+  recentState: MotionState;
+  stableState: MotionState;
 }
 
 export interface SlidingWindowTracker {
@@ -22,10 +25,16 @@ export interface SlidingWindowTracker {
 let lastWindowDistance = 0;
 let lastSmoothedDelta = 0;
 
+// Hysteresis state machine
+let hysteresisState: MotionState = 'idle';
+let movementHistory: boolean[] = [false, false, false]; // Last 3 ticks
+
 const ALPHA = 0.35;
 const MAX_DELTA = 10;
-const EPSILON = 0.15;
+const EPSILON = 0.2;
 const WINDOW_MS = 45000;
+const RECENT_WINDOW_MS = 8000;
+const WALKING_SPEED_THRESHOLD = 0.3;
 
 function haversine(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;
@@ -46,8 +55,8 @@ function computeSpeed(distance: number, durationMs: number): number {
 }
 
 function deriveMotionState(speed: number): MotionState {
-  if (speed >= 2.0) return 'movingFast';
-  if (speed >= 0.3) return 'walking';
+  if (speed >= 2.5) return 'movingFast';
+  if (speed >= 0.2) return 'walking';
   return 'idle';
 }
 
@@ -95,6 +104,36 @@ export function createSlidingWindowTracker(): SlidingWindowTracker {
     return valid;
   }
 
+  function computeRecentMetrics(validPoints: Array<{ lat: number; lng: number; timestamp: number; accuracy: number }>) {
+    // Get only recent points (last 8 seconds) for state detection
+    const now = Date.now();
+    const recentPoints = validPoints.filter(p => now - p.timestamp <= RECENT_WINDOW_MS);
+    
+    if (recentPoints.length < 2) {
+      return { recentSpeed: 0, recentState: 'idle' as MotionState };
+    }
+    
+    const recentDuration = recentPoints[recentPoints.length - 1].timestamp - recentPoints[0].timestamp;
+    if (recentDuration < 3000) { // Less than 3 seconds of recent data
+      return { recentSpeed: 0, recentState: 'idle' as MotionState };
+    }
+    
+    let recentDistance = 0;
+    for (let i = 1; i < recentPoints.length; i++) {
+      recentDistance += haversine(
+        recentPoints[i - 1].lat,
+        recentPoints[i - 1].lng,
+        recentPoints[i].lat,
+        recentPoints[i].lng
+      );
+    }
+    
+    const recentSpeed = computeSpeed(recentDistance, recentDuration);
+    const recentState = deriveMotionState(recentSpeed);
+    
+    return { recentSpeed, recentState };
+  }
+
   function getMetrics(): SlidingWindowMetrics {
     const validPoints = getValidPoints();
     const windowDuration = validPoints.length >= 2
@@ -116,7 +155,28 @@ export function createSlidingWindowTracker(): SlidingWindowTracker {
     const gpsSpeed = windowDuration > 0 ? computeSpeed(windowDistance, windowDuration) : 0;
     const movementState = deriveMotionState(gpsSpeed);
 
-    if (validPoints.length < 2) {
+    // Get recent metrics for responsive state
+    const { recentSpeed, recentState } = computeRecentMetrics(validPoints);
+
+    // Update movement history (last 3 ticks) - for hysteresis
+    const isMovingNow = recentSpeed >= WALKING_SPEED_THRESHOLD;
+    movementHistory.push(isMovingNow);
+    if (movementHistory.length > 3) movementHistory.shift();
+    const walkingCount = movementHistory.filter(Boolean).length;
+    const idleCount = 3 - walkingCount;
+
+    // Apply hysteresis state machine
+    if (hysteresisState === 'idle') {
+      // Need 2 of 3 ticks moving to enter walking
+      if (walkingCount >= 2) hysteresisState = 'walking';
+    } else {
+      // Need 2 of 3 ticks idle to exit walking (stricter exit)
+      if (idleCount >= 2) hysteresisState = 'idle';
+    }
+
+    const stableState = hysteresisState;
+
+if (validPoints.length < 2) {
       return {
         windowDistance: 0,
         rawDelta: 0,
@@ -125,8 +185,11 @@ export function createSlidingWindowTracker(): SlidingWindowTracker {
         pointCount: validPoints.length,
         windowDuration,
         isValid: false,
-        movementState: 'idle',
+        movementState: recentState,
         gpsSpeed: 0,
+        recentSpeed: 0,
+        recentState: 'idle',
+        stableState: 'idle', // Force idle when not enough data
       };
     }
 
@@ -141,9 +204,12 @@ export function createSlidingWindowTracker(): SlidingWindowTracker {
         clampedDelta: 0,
         pointCount: validPoints.length,
         windowDuration,
-        isValid: validPoints.length >= 5 && windowDuration >= 10000,
-        movementState,
+        isValid: validPoints.length >= 3 && windowDuration >= 8000,
+        movementState: recentState,
         gpsSpeed,
+        recentSpeed,
+        recentState,
+        stableState,
       };
     }
 
@@ -160,9 +226,12 @@ export function createSlidingWindowTracker(): SlidingWindowTracker {
       clampedDelta,
       pointCount: validPoints.length,
       windowDuration,
-      isValid: validPoints.length >= 5 && windowDuration >= 10000,
-      movementState,
+      isValid: validPoints.length >= 3 && windowDuration >= 8000,
+      movementState: recentState,
       gpsSpeed,
+      recentSpeed,
+      recentState,
+      stableState,
     };
   }
 

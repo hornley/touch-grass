@@ -1092,7 +1092,8 @@ export default function Home() {
                     <div>lat/lng: <span style={{ color: '#93c5fd' }}>{location ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : 'N/A'}</span></div>
                     <div>tracking: <span style={{ color: isTracking ? '#4ade80' : '#ef4444' }}>{isTracking ? 'ON' : 'OFF'}</span></div>
                     <div>accuracy: <span style={{ color: currentAccuracy && currentAccuracy > 100 ? '#ef4444' : '#4ade80' }}>{currentAccuracy !== null ? `${currentAccuracy.toFixed(0)}m` : 'N/A'}</span></div>
-                    <div>state: <span style={{ color: motionState === 'walking' ? '#4ade80' : motionState === 'movingFast' ? '#fca5a5' : '#6a8898' }}>{motionState ?? 'N/A'}</span></div>
+                    <div>state: <span style={{ color: motionState === 'walking' ? '#4ade80' : motionState === 'movingFast' ? '#fca5a5' : '#6a8898' }}>{motionState ?? 'N/A'}</span>
+                    <span style={{ color: '#f59e0b', marginLeft: '8px' }}>| stable: {debugInfo.stableState}</span></div>
                     <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #1e2e3e' }}>WINDOW:</div>
                     <div>windowDist: <span style={{ color: '#93c5fd' }}>{debugInfo.windowDistance.toFixed(1)}m</span></div>
                     <div>rawDelta: <span style={{ color: debugInfo.rawDelta > 5 ? '#fca5a5' : '#6a8898' }}>{debugInfo.rawDelta.toFixed(2)}m</span></div>
@@ -1101,6 +1102,7 @@ export default function Home() {
                     <div>points: <span style={{ color: '#6a8898' }}>{debugInfo.pointCount}</span></div>
                     <div>valid: <span style={{ color: debugInfo.isValid ? '#4ade80' : '#ef4444' }}>{debugInfo.isValid ? 'YES' : 'NO'}</span></div>
                     <div>speed: <span style={{ color: debugInfo.gpsSpeed > 0.3 ? '#4ade80' : '#6a8898' }}>{debugInfo.gpsSpeed.toFixed(2)}m/s</span></div>
+                    <div>recent: <span style={{ color: debugInfo.recentSpeed > 0.3 ? '#4ade80' : '#6a8898' }}>{debugInfo.recentSpeed.toFixed(2)}m/s</span></div>
                     <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #1e2e3e' }}>PROGRESS:</div>
                     <div>lastMovement: <span style={{ color: '#d4a030' }}>{lastMovementDistance.toFixed(2)} m</span>
                     <div>quest: <span style={{ color: gameState?.currentQuest ? (gameState.currentQuest.type === 'travel' ? '#4ade80' : '#fca5a5') : '#6a8898' }}>{gameState?.currentQuest ? `${gameState.currentQuest.type} (${gameState.currentQuest.progress}/${gameState.currentQuest.goal})` : 'NONE'}</span></div></div>

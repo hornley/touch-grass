@@ -12,6 +12,8 @@ interface DebugInfo {
   windowDuration: number;
   isValid: boolean;
   gpsSpeed: number;
+  recentSpeed: number;
+  stableState: MotionState;
 }
 
 interface UseLocationResult {
@@ -56,6 +58,8 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
     windowDuration: 0,
     isValid: false,
     gpsSpeed: 0,
+    recentSpeed: 0,
+    stableState: 'idle',
   });
 
   const slidingWindowRef = useRef(createSlidingWindowTracker());
@@ -72,10 +76,10 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
     const metrics = slidingWindowRef.current.getMetrics();
     const clampedDelta = metrics.clampedDelta;
 
-    const multiplier = getMultiplier(metrics.movementState);
+    const multiplier = getMultiplier(metrics.stableState);
     const progressDelta = clampedDelta * multiplier;
 
-    setMotionState(metrics.movementState);
+    setMotionState(metrics.stableState);
     setDebugInfo({
       windowDistance: metrics.windowDistance,
       rawDelta: metrics.rawDelta,
@@ -85,6 +89,8 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
       windowDuration: metrics.windowDuration,
       isValid: metrics.isValid,
       gpsSpeed: metrics.gpsSpeed,
+      recentSpeed: metrics.recentSpeed,
+      stableState: metrics.stableState,
     });
 
     if (metrics.isValid && progressDelta > 0) {
