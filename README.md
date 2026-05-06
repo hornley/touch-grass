@@ -131,3 +131,19 @@ http://localhost:3000?lat=14.5995&lng=120.9842
 npm run build    # production build
 npm run lint     # eslint check
 ```
+
+## Deploy (Azure Static Web Apps)
+
+Production URL:
+
+`https://ashy-stone-078346700.7.azurestaticapps.net`
+
+This project is configured to deploy as a static Next.js export (`out/`) using GitHub Actions via [.github/workflows/azure-static-web-apps.yml](.github/workflows/azure-static-web-apps.yml).
+
+If you are not a repo owner:
+
+- You can push code and open PRs, but you usually cannot create repo secrets.
+- Ask a repo admin to add `AZURE_STATIC_WEB_APPS_API_TOKEN` in repository secrets.
+- Once merged to `master`, deployment runs automatically.
+
+If you need to deploy without repo-secret access, ask an owner for a one-time deployment token from the Azure Static Web App and deploy from your machine with Azure Static Web Apps CLI.
