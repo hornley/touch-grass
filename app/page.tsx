@@ -24,6 +24,7 @@ import { ObjectDetection } from '@/components/ObjectDetection';
 import { BottomNav } from '@/components/BottomNav';
 import { StatsTab } from '@/components/StatsTab';
 import { AchievementsTab } from '@/components/AchievementsTab';
+import { TravelMapWrapper } from '@/components/TravelMapWrapper';
 
 type Tab = 'home' | 'stats' | 'achievements';
 
@@ -895,20 +896,31 @@ export default function Home() {
 
                     {gameState.currentQuest.type === 'travel' && (
                       <div>
-                        <div style={{ height: '5px', background: '#172030', border: '1px solid #2a3d52', overflow: 'hidden', marginBottom: '6px' }}>
-                          <div style={{
-                            height: '100%',
-                            width: `${Math.min(100, (gameState.currentQuest.progress / gameState.currentQuest.goal) * 100)}%`,
-                            background: 'linear-gradient(90deg, #1e3a8a, #3b82f6)',
-                            transition: 'width 0.5s ease',
-                          }} />
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: '10px', color: '#6a8898' }}>PROGRESS</span>
-                          <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '11px', color: '#93c5fd' }}>
-                            {Math.round(gameState.currentQuest.progress)} M &nbsp;╱&nbsp; {gameState.currentQuest.goal} M
-                          </span>
-                        </div>
+                        {location ? (
+                          <TravelMapWrapper
+                            currentLocation={location}
+                            motionState={motionState}
+                            progress={gameState.currentQuest.progress}
+                            goal={gameState.currentQuest.goal}
+                          />
+                        ) : (
+                          <>
+                            <div style={{ height: '5px', background: '#172030', border: '1px solid #2a3d52', overflow: 'hidden', marginBottom: '6px' }}>
+                              <div style={{
+                                height: '100%',
+                                width: `${Math.min(100, (gameState.currentQuest.progress / gameState.currentQuest.goal) * 100)}%`,
+                                background: 'linear-gradient(90deg, #1e3a8a, #3b82f6)',
+                                transition: 'width 0.5s ease',
+                              }} />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ fontSize: '10px', color: '#6a8898' }}>PROGRESS</span>
+                              <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '11px', color: '#93c5fd' }}>
+                                {Math.round(gameState.currentQuest.progress)} M &nbsp;╱&nbsp; {gameState.currentQuest.goal} M
+                              </span>
+                            </div>
+                          </>
+                        )}
                       </div>
                     )}
 
