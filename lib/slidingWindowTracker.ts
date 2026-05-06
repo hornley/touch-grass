@@ -22,8 +22,13 @@ export interface SlidingWindowTracker {
   reset: () => void;
 }
 
+// Module-level state
 let lastWindowDistance = 0;
 let lastSmoothedDelta = 0;
+
+// Snapshot cache - computed once per tick
+let lastSnapshot: SlidingWindowMetrics | null = null;
+let lastSnapshotTick: number = 0;
 
 // Hysteresis state machine
 let hysteresisState: MotionState = 'idle';
@@ -31,7 +36,7 @@ let movementHistory: boolean[] = [false, false, false]; // Last 3 ticks
 
 const ALPHA = 0.35;
 const MAX_DELTA = 10;
-const EPSILON = 0.2;
+const EPSILON = 0.2;  // Used only as OUTPUT filter, not control flow
 const WINDOW_MS = 45000;
 const RECENT_WINDOW_MS = 8000;
 const WALKING_SPEED_THRESHOLD = 0.3;
@@ -64,17 +69,19 @@ export function createSlidingWindowTracker(): SlidingWindowTracker {
   const buffer: Array<{ lat: number; lng: number; timestamp: number; accuracy: number }> = [];
 
   function addPosition(lat: number, lng: number, accuracy: number, timestamp?: number): boolean {
-    buffer.push({
-      lat,
-      lng,
-      accuracy,
-      timestamp: timestamp ?? Date.now(),
-    });
+    const now = timestamp ?? Date.now();
+    
+    buffer.push({ lat, lng, accuracy, timestamp: now });
 
-    const cutoff = Date.now() - WINDOW_MS;
+    // Prune old points
+    const cutoff = now - WINDOW_MS;
     while (buffer.length && buffer[0].timestamp < cutoff) {
       buffer.shift();
     }
+
+    // Invalidate cache when new point arrives
+    lastSnapshotTick = 0;
+    lastSnapshot = null;
 
     return true;
   }
@@ -105,19 +112,18 @@ export function createSlidingWindowTracker(): SlidingWindowTracker {
   }
 
   function computeRecentMetrics(validPoints: Array<{ lat: number; lng: number; timestamp: number; accuracy: number }>) {
-    // Get only recent points (last 8 seconds) for state detection
     const now = Date.now();
     const recentPoints = validPoints.filter(p => now - p.timestamp <= RECENT_WINDOW_MS);
-    
+
     if (recentPoints.length < 2) {
       return { recentSpeed: 0, recentState: 'idle' as MotionState };
     }
-    
+
     const recentDuration = recentPoints[recentPoints.length - 1].timestamp - recentPoints[0].timestamp;
-    if (recentDuration < 3000) { // Less than 3 seconds of recent data
+    if (recentDuration < 3000) {
       return { recentSpeed: 0, recentState: 'idle' as MotionState };
     }
-    
+
     let recentDistance = 0;
     for (let i = 1; i < recentPoints.length; i++) {
       recentDistance += haversine(
@@ -127,14 +133,14 @@ export function createSlidingWindowTracker(): SlidingWindowTracker {
         recentPoints[i].lng
       );
     }
-    
+
     const recentSpeed = computeSpeed(recentDistance, recentDuration);
     const recentState = deriveMotionState(recentSpeed);
-    
+
     return { recentSpeed, recentState };
   }
 
-  function getMetrics(): SlidingWindowMetrics {
+  function computeMetricsInternal(now: number): SlidingWindowMetrics {
     const validPoints = getValidPoints();
     const windowDuration = validPoints.length >= 2
       ? validPoints[validPoints.length - 1].timestamp - validPoints[0].timestamp
@@ -153,12 +159,9 @@ export function createSlidingWindowTracker(): SlidingWindowTracker {
     }
 
     const gpsSpeed = windowDuration > 0 ? computeSpeed(windowDistance, windowDuration) : 0;
-    const movementState = deriveMotionState(gpsSpeed);
-
-    // Get recent metrics for responsive state
     const { recentSpeed, recentState } = computeRecentMetrics(validPoints);
 
-    // Update movement history (last 3 ticks) - for hysteresis
+    // Update movement history (hysteresis)
     const isMovingNow = recentSpeed >= WALKING_SPEED_THRESHOLD;
     movementHistory.push(isMovingNow);
     if (movementHistory.length > 3) movementHistory.shift();
@@ -167,16 +170,14 @@ export function createSlidingWindowTracker(): SlidingWindowTracker {
 
     // Apply hysteresis state machine
     if (hysteresisState === 'idle') {
-      // Need 2 of 3 ticks moving to enter walking
       if (walkingCount >= 2) hysteresisState = 'walking';
     } else {
-      // Need 2 of 3 ticks idle to exit walking (stricter exit)
       if (idleCount >= 2) hysteresisState = 'idle';
     }
 
     const stableState = hysteresisState;
 
-if (validPoints.length < 2) {
+    if (validPoints.length < 2) {
       return {
         windowDistance: 0,
         rawDelta: 0,
@@ -189,41 +190,32 @@ if (validPoints.length < 2) {
         gpsSpeed: 0,
         recentSpeed: 0,
         recentState: 'idle',
-        stableState: 'idle', // Force idle when not enough data
+        stableState: 'idle',
       };
     }
 
     const rawDelta = windowDistance - lastWindowDistance;
 
-    if (Math.abs(rawDelta) < EPSILON) {
-      lastWindowDistance = windowDistance;
-      return {
-        windowDistance,
-        rawDelta: 0,
-        smoothedDelta: lastSmoothedDelta,
-        clampedDelta: 0,
-        pointCount: validPoints.length,
-        windowDuration,
-        isValid: validPoints.length >= 3 && windowDuration >= 8000,
-        movementState: recentState,
-        gpsSpeed,
-        recentSpeed,
-        recentState,
-        stableState,
-      };
-    }
-
+    // FIX 2: ALWAYS compute EMA - EPSILON is output filter only
+    // Compute smoothedDelta (always)
     const smoothedDelta = ALPHA * rawDelta + (1 - ALPHA) * lastSmoothedDelta;
+    
+    // Compute clampedDelta (always)
     const clampedDelta = Math.max(0, Math.min(MAX_DELTA, smoothedDelta));
 
+    // Update state (always)
     lastWindowDistance = windowDistance;
     lastSmoothedDelta = smoothedDelta;
 
+    // Apply EPSILON as OUTPUT filter only, not as control flow
+    const displayRawDelta = Math.abs(rawDelta) < EPSILON ? 0 : rawDelta;
+    const displayClampedDelta = Math.abs(displayRawDelta) < EPSILON ? 0 : clampedDelta;
+
     return {
       windowDistance,
-      rawDelta,
-      smoothedDelta,
-      clampedDelta,
+      rawDelta: displayRawDelta,
+      smoothedDelta: smoothedDelta,
+      clampedDelta: displayClampedDelta,
       pointCount: validPoints.length,
       windowDuration,
       isValid: validPoints.length >= 3 && windowDuration >= 8000,
@@ -235,6 +227,21 @@ if (validPoints.length < 2) {
     };
   }
 
+  function getMetrics(): SlidingWindowMetrics {
+    const now = Date.now();
+
+    // Return cached snapshot if it exists and is from this tick
+    if (lastSnapshot && lastSnapshotTick === now) {
+      return lastSnapshot;
+    }
+
+    // Compute once per tick and cache
+    lastSnapshot = computeMetricsInternal(now);
+    lastSnapshotTick = now;
+
+    return lastSnapshot;
+  }
+
   function getProgressDelta(): number {
     return getMetrics().clampedDelta;
   }
@@ -243,6 +250,10 @@ if (validPoints.length < 2) {
     buffer.length = 0;
     lastWindowDistance = 0;
     lastSmoothedDelta = 0;
+    hysteresisState = 'idle';
+    movementHistory = [false, false, false];
+    lastSnapshot = null;
+    lastSnapshotTick = 0;
   }
 
   return {

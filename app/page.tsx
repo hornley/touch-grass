@@ -18,6 +18,7 @@ import {
   fetchNearbyPois,
 } from '@/lib/game';
 import { useLocation } from '@/lib/useLocation';
+import { saveSession, loadSession } from '@/lib/sessionManager';
 import { CameraCapture } from '@/components/CameraCapture';
 import { PoseDetection } from '@/components/PoseDetection';
 import { ObjectDetection } from '@/components/ObjectDetection';
@@ -76,10 +77,19 @@ export default function Home() {
   const [xpSpark, setXpSpark] = useState(false);
   const prevXpRef = useRef<number | null>(null);
   const lastUpdateRef = useRef<number>(0);
+  const lastLocationRef = useRef<{ lat: number; lng: number } | null>(null);
   const UPDATE_INTERVAL = 5000; // Only update once per 5 seconds
 
   const lastLocation = gameState?.player.lastLocation ?? null;
   const { location, error, isLoading, requestLocation, lastMovementDistance, currentAccuracy, motionState, debugInfo } = useLocation(lastLocation, locationEnabled);
+
+  // Track last location for session saving
+  useEffect(() => {
+    if (location) {
+      lastLocationRef.current = { lat: location.lat, lng: location.lng };
+    }
+  }, [location]);
+  
   const distanceFromLast = lastMovementDistance;
   const lastLocationForQuest = (location ?? lastLocation)
     ? { lat: (location ?? lastLocation)!.lat, lng: (location ?? lastLocation)!.lng }
@@ -162,6 +172,18 @@ export default function Home() {
     const handleVisibilityChange = () => {
       if (document.hidden) {
         const now = Date.now();
+        const lastLoc = lastLocationRef.current;
+        
+        // Save to session manager with position
+        saveSession(
+          gameState.player.totalDistance,
+          gameState.currentQuest?.progress ?? 0,
+          gameState.currentQuest?.id ?? null,
+          gameState.currentQuest?.goal ?? 100,
+          lastLoc?.lat ?? null,
+          lastLoc?.lng ?? null
+        );
+        
         setGameState(prev => {
           if (!prev) return prev;
           const sessions = prev.currentSession
@@ -193,7 +215,10 @@ export default function Home() {
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('beforeunload', () => { if (gameState) saveGameState(gameState); });
+    window.addEventListener('beforeunload', () => { 
+      if (gameState) saveGameState(gameState); 
+    });
+    
     return () => { document.removeEventListener('visibilitychange', handleVisibilityChange); };
   }, [gameState]);
 
@@ -232,12 +257,13 @@ export default function Home() {
     
     lastUpdateRef.current = now;
 
+    // Always update total distance (codex) when user is moving, regardless of quest type
     const quest = gameState.currentQuest;
-    if (!quest || quest.type !== 'travel') return;
+    const isTravelQuest = quest?.type === 'travel';
+    const willComplete = isTravelQuest && quest.progress + distanceFromLast >= quest.goal;
     
-    const willComplete = quest.progress + distanceFromLast >= quest.goal;
-    
-    if (!willComplete) {
+    // Update total distance for codex regardless of quest type
+    if (distanceFromLast > 0) {
       setGameState(prev => {
         if (!prev) return prev;
         const newDist = (prev.player.totalDistance ?? 0) + distanceFromLast;
@@ -246,16 +272,17 @@ export default function Home() {
           player: { ...prev.player, lastLocation: location, lastActive: Date.now(), totalDistance: newDist },
         };
 
-        if (prev.currentQuest?.type === 'travel') {
-          const progress = prev.currentQuest.progress + distanceFromLast;
-          newState.currentQuest = { ...prev.currentQuest, progress };
+        // Only update quest progress for travel quests
+        if (isTravelQuest && !willComplete) {
+          newState.currentQuest = { ...prev.currentQuest!, progress: prev.currentQuest!.progress + distanceFromLast };
         }
 
         saveGameState(newState);
         return newState;
       });
-      return;
     }
+    
+    if (!isTravelQuest || willComplete) return;
 
     const completeTravelQuest = async () => {
       const newDist = (gameState.player.totalDistance ?? 0) + distanceFromLast;

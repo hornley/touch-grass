@@ -2,6 +2,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Location } from './types';
 import { createSlidingWindowTracker, MotionState } from './slidingWindowTracker';
+import { saveSession, loadSession } from './sessionManager';
 
 interface DebugInfo {
   windowDistance: number;
@@ -64,6 +65,40 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
 
   const slidingWindowRef = useRef(createSlidingWindowTracker());
   const intervalRef = useRef<number | null>(null);
+
+  // Load session on mount
+  useEffect(() => {
+    const session = loadSession();
+    if (!session.isNewSession && session.sessionData) {
+      const { sessionData, timeAwayMs } = session;
+      // Resume from saved progress if within reasonable time
+      if (timeAwayMs < 300000) { // 5 minutes
+        // Set last movement from saved session for continuity
+        setLastMovementDistance(0);
+      }
+    }
+  }, []);
+
+  // Save session on visibility change or before unload
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        // Don't save from here - handled in game state
+      }
+    };
+
+    const handleBeforeUnload = () => {
+      // Don't save from here - handled in game state
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, []);
 
   const processLocation = useCallback((
     lat: number,
