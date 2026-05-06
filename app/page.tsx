@@ -69,14 +69,17 @@ export default function Home() {
   const [achievementToast, setAchievementToast] = useState<string | null>(null);
   const [isTestMode, setIsTestMode] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
+  const [isTracking, setIsTracking] = useState(false);
   const [visitCapturePending, setVisitCapturePending] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [tabFadeKey, setTabFadeKey] = useState(0);
   const [xpSpark, setXpSpark] = useState(false);
   const prevXpRef = useRef<number | null>(null);
+  const lastUpdateRef = useRef<number>(0);
+  const UPDATE_INTERVAL = 5000; // Only update once per 5 seconds
 
   const lastLocation = gameState?.player.lastLocation ?? null;
-  const { location, error, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist } = useLocation(lastLocation, locationEnabled);
+  const { location, error, isLoading, requestLocation, lastMovementDistance, currentAccuracy, motionState, debugInfo } = useLocation(lastLocation, locationEnabled);
   const distanceFromLast = lastMovementDistance;
   const lastLocationForQuest = (location ?? lastLocation)
     ? { lat: (location ?? lastLocation)!.lat, lng: (location ?? lastLocation)!.lng }
@@ -212,18 +215,29 @@ export default function Home() {
     if (!locationEnabled) return;
 
     if (currentQuestType === 'travel') {
-      if (!isTracking) startTracking();
+      if (!isTracking) {
+        setIsTracking(true);
+      }
     } else {
-      if (isTracking) stopTracking();
+      if (isTracking) {
+        setIsTracking(false);
+      }
     }
-  }, [currentQuestType, locationEnabled, isTracking, startTracking, stopTracking]);
+  }, [currentQuestType, locationEnabled, isTracking]);
 
   useEffect(() => {
+    const now = Date.now();
     if (!gameState || !location || lastMovementDistance <= 0) return;
+    if (now - lastUpdateRef.current < UPDATE_INTERVAL) return;
+    
+    lastUpdateRef.current = now;
 
     const quest = gameState.currentQuest;
-    const completesTravel = quest?.type === 'travel' && quest.progress + distanceFromLast >= quest.goal;
-    if (!completesTravel) {
+    if (!quest || quest.type !== 'travel') return;
+    
+    const willComplete = quest.progress + distanceFromLast >= quest.goal;
+    
+    if (!willComplete) {
       setGameState(prev => {
         if (!prev) return prev;
         const newDist = (prev.player.totalDistance ?? 0) + distanceFromLast;
@@ -286,7 +300,7 @@ export default function Home() {
         chainCompleted = true;
         setQuestMessage(`CHAIN COMPLETE  ·  +${bonusXp} XP BONUS`);
         newState.currentQuest = getRandomQuest(newState.player.completedQuests, newState.player.level);
-        stopTracking();
+        setIsTracking(false);
       } else {
         const result = await getNextQuestWithPois(newState.player.completedQuests, newLevel, updatedChain, lastLocationForQuest);
         newState.currentQuest = result.quest;
@@ -307,7 +321,7 @@ export default function Home() {
      };
 
      completeTravelQuest();
-   }, [gameState, location, distanceFromLast, getNextQuestWithPois, showAchievementToasts, lastLocationForQuest, stopTracking]);
+   }, [gameState, location, distanceFromLast, getNextQuestWithPois, showAchievementToasts, lastLocationForQuest]);
 
    const handleStart = () => {
     if (!gameState) return;
@@ -1075,12 +1089,21 @@ export default function Home() {
                   {/* GPS debug info */}
                   <div style={{ fontSize: '10px', color: '#4e6878', marginTop: '10px', padding: '8px', background: '#0d1520', borderRadius: '4px' }}>
                     <div style={{ marginBottom: '4px', color: '#6a8898' }}>GPS DEBUG:</div>
+                    <div>lat/lng: <span style={{ color: '#93c5fd' }}>{location ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : 'N/A'}</span></div>
                     <div>tracking: <span style={{ color: isTracking ? '#4ade80' : '#ef4444' }}>{isTracking ? 'ON' : 'OFF'}</span></div>
                     <div>accuracy: <span style={{ color: currentAccuracy && currentAccuracy > 100 ? '#ef4444' : '#4ade80' }}>{currentAccuracy !== null ? `${currentAccuracy.toFixed(0)}m` : 'N/A'}</span></div>
-                    <div>segment: <span style={{ color: currentSegmentDist !== null ? (currentSegmentDist < 5 ? '#ef4444' : '#4ade80') : '#6a8898' }}>{currentSegmentDist !== null ? `${currentSegmentDist.toFixed(1)}m` : 'N/A'}</span></div>
-                    <div>speed: <span style={{ color: currentSpeed !== null ? (currentSpeed > 10 ? '#ef4444' : '#4ade80') : '#6a8898' }}>{currentSpeed !== null ? `${currentSpeed.toFixed(1)}m/s` : 'N/A'}</span></div>
-                    <div>cumulative: <span style={{ color: '#d4a030' }}>{cumulativeDistance.toFixed(1)} m</span></div>
-                    <div>lastMovement: <span style={{ color: '#d4a030' }}>{lastMovementDistance.toFixed(1)} m</span></div>
+                    <div>state: <span style={{ color: motionState === 'walking' ? '#4ade80' : motionState === 'movingFast' ? '#fca5a5' : '#6a8898' }}>{motionState ?? 'N/A'}</span></div>
+                    <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #1e2e3e' }}>WINDOW:</div>
+                    <div>windowDist: <span style={{ color: '#93c5fd' }}>{debugInfo.windowDistance.toFixed(1)}m</span></div>
+                    <div>rawDelta: <span style={{ color: debugInfo.rawDelta > 5 ? '#fca5a5' : '#6a8898' }}>{debugInfo.rawDelta.toFixed(2)}m</span></div>
+                    <div>smoothed: <span style={{ color: '#d4a030' }}>{debugInfo.smoothedDelta.toFixed(2)}m</span></div>
+                    <div>clamped: <span style={{ color: debugInfo.clampedDelta > 0 ? '#4ade80' : '#6a8898' }}>{debugInfo.clampedDelta.toFixed(2)}m</span></div>
+                    <div>points: <span style={{ color: '#6a8898' }}>{debugInfo.pointCount}</span></div>
+                    <div>valid: <span style={{ color: debugInfo.isValid ? '#4ade80' : '#ef4444' }}>{debugInfo.isValid ? 'YES' : 'NO'}</span></div>
+                    <div>speed: <span style={{ color: debugInfo.gpsSpeed > 0.3 ? '#4ade80' : '#6a8898' }}>{debugInfo.gpsSpeed.toFixed(2)}m/s</span></div>
+                    <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #1e2e3e' }}>PROGRESS:</div>
+                    <div>lastMovement: <span style={{ color: '#d4a030' }}>{lastMovementDistance.toFixed(2)} m</span>
+                    <div>quest: <span style={{ color: gameState?.currentQuest ? (gameState.currentQuest.type === 'travel' ? '#4ade80' : '#fca5a5') : '#6a8898' }}>{gameState?.currentQuest ? `${gameState.currentQuest.type} (${gameState.currentQuest.progress}/${gameState.currentQuest.goal})` : 'NONE'}</span></div></div>
                   </div>
 
                   {/* Actions */}
