@@ -4,12 +4,23 @@ export interface Location {
   timestamp: number;
 }
 
+export interface QuestHistoryEntry {
+  questId: string;
+  type: Quest['type'];
+  description: string;
+  xpEarned: number;
+  timestamp: number;
+  chainId?: string;
+  chainStep?: number;
+}
+
 export interface Player {
   xp: number;
   level: number;
   lastLocation: Location | null;
   lastActive: number;
   completedQuests: string[];
+  questHistory: QuestHistoryEntry[];
   streak: number;
   lastStreakDate: string | null;
   totalDistance: number;

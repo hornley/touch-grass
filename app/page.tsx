@@ -16,6 +16,7 @@ import {
   ACHIEVEMENTS,
   calculateDistance,
   fetchNearbyPois,
+  addQuestToHistory,
 } from '@/lib/game';
 import { useLocation } from '@/lib/useLocation';
 import { CameraCapture } from '@/components/CameraCapture';
@@ -280,6 +281,15 @@ export default function Home() {
           xp: newXp,
           level: newLevel,
           completedQuests: [...gameState.player.completedQuests, quest.id],
+          questHistory: addQuestToHistory(gameState.player.questHistory ?? [], {
+            questId: quest.id,
+            type: quest.type,
+            description: quest.description,
+            xpEarned: xp,
+            timestamp: Date.now(),
+            chainId: gameState.player.currentChain?.id,
+            chainStep: gameState.player.currentChain ? gameState.player.currentChain.stepIndex + 1 : undefined,
+          }),
           currentChain: updatedChain,
           lastLocation: location,
           lastActive: Date.now(),
@@ -328,11 +338,11 @@ export default function Home() {
         setGameState(newState);
       };
       
-      void completeQuest();
+      completeQuest();
     }
-}, [gameState?.currentQuest?.progress]);
+  }, [gameState?.currentQuest?.progress]);
 
-    const handleStart = () => {
+  const handleStart = () => {
     if (!gameState) return;
     setShowWelcome(false);
     setLocationEnabled(true);
@@ -400,6 +410,15 @@ export default function Home() {
           xp: newXp + chainBonus,
           level: newLevel,
           completedQuests: completedIds,
+          questHistory: addQuestToHistory(prev.player.questHistory ?? [], {
+            questId: prev.currentQuest.id,
+            type: prev.currentQuest.type,
+            description: prev.currentQuest.description,
+            xpEarned: xp,
+            timestamp: Date.now(),
+            chainId: prev.player.currentChain?.id,
+            chainStep: prev.player.currentChain ? prev.player.currentChain.stepIndex + 1 : undefined,
+          }),
           photoQuestsCompleted: (prev.player.photoQuestsCompleted ?? 0) + (prev.currentQuest.type === 'photo' ? 1 : 0),
           currentChain: nextChain,
           chainCompletions: chainCompleted
@@ -472,6 +491,15 @@ export default function Home() {
           xp: newXp + chainBonus,
           level: newLevel,
           completedQuests: completedIds,
+          questHistory: addQuestToHistory(prev.player.questHistory ?? [], {
+            questId: prev.currentQuest.id,
+            type: prev.currentQuest.type,
+            description: prev.currentQuest.description,
+            xpEarned: xp,
+            timestamp: Date.now(),
+            chainId: prev.player.currentChain?.id,
+            chainStep: prev.player.currentChain ? prev.player.currentChain.stepIndex + 1 : undefined,
+          }),
           currentChain: nextChain,
           chainCompletions: chainCompleted
             ? (prev.player.chainCompletions ?? 0) + 1
@@ -533,6 +561,15 @@ export default function Home() {
           xp: newXp + chainBonus,
           level: newLevel,
           completedQuests: completedIds,
+          questHistory: addQuestToHistory(prev.player.questHistory ?? [], {
+            questId: prev.currentQuest.id,
+            type: prev.currentQuest.type,
+            description: prev.currentQuest.description,
+            xpEarned: xp,
+            timestamp: Date.now(),
+            chainId: prev.player.currentChain?.id,
+            chainStep: prev.player.currentChain ? prev.player.currentChain.stepIndex + 1 : undefined,
+          }),
           currentChain: nextChain,
           chainCompletions: chainCompleted
             ? (prev.player.chainCompletions ?? 0) + 1
@@ -578,7 +615,7 @@ export default function Home() {
 
   const resetGame = useCallback(() => {
     const initial = loadGameState();
-    Object.assign(initial.player, { xp: 0, level: 1, completedQuests: [], streak: 0, lastStreakDate: null, totalDistance: 0, achievements: [], photoQuestsCompleted: 0, currentChain: null, chainCompletions: 0 });
+    Object.assign(initial.player, { xp: 0, level: 1, completedQuests: [], questHistory: [], streak: 0, lastStreakDate: null, totalDistance: 0, achievements: [], photoQuestsCompleted: 0, currentChain: null, chainCompletions: 0 });
     const reset = async () => {
       const result = await getNextQuestWithPois([], 1, null, lastLocationForQuest);
       initial.currentQuest = result.quest;
