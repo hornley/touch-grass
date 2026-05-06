@@ -1,7 +1,7 @@
 // components/TravelMap.tsx
 'use client';
-import { useEffect, useState, useRef } from 'react';
-import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet';
+import { useEffect, useRef, useMemo, useState } from 'react';
+import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Location } from '@/lib/types';
@@ -61,54 +61,59 @@ interface TravelMapProps {
 }
 
 export default function TravelMap({ currentLocation, motionState, progress, goal }: TravelMapProps) {
-  const pos: [number, number] = [currentLocation.lat, currentLocation.lng];
   const lat = currentLocation.lat;
   const lng = currentLocation.lng;
-  const initialPosKey = `${lat.toFixed(5)},${lng.toFixed(5)}`;
+  const pos: [number, number] = [lat, lng];
 
-  const [trail, setTrail] = useState<[number, number][]>([]);
-  const isInitialized = useRef(false);
+  const [renderKey, setRenderKey] = useState(0);
+  const prevPosRef = useRef<string>('');
+
+  const posKey = useMemo(() => `${lat.toFixed(5)},${lng.toFixed(5)}`, [lat, lng]);
 
   useEffect(() => {
-    if (!isInitialized.current) {
-      setTrail([pos]);
-      isInitialized.current = true;
-    } else {
-      setTrail((prev) => {
-        const last = prev[prev.length - 1];
-        if (!last || last[0] !== lat || last[1] !== lng) {
-          return [...prev, pos].slice(-MAX_TRAIL_POINTS);
-        }
-        return prev;
-      });
+    if (prevPosRef.current && prevPosRef.current !== posKey) {
+      setRenderKey((k) => k + 1);
     }
-  }, [lat, lng, pos]);
+    prevPosRef.current = posKey;
+  }, [posKey]);
 
   const pct = Math.min(100, Math.round((progress / goal) * 100));
 
   return (
     <div style={{ position: 'relative', borderRadius: '2px', overflow: 'hidden', border: '1px solid #2a3d52' }}>
-      <MapContainer
-        key={initialPosKey}
-        center={pos}
-        zoom={17}
-        style={{ height: '220px', width: '100%', background: '#0d1520' }}
-        zoomControl={false}
-        attributionControl={false}
-      >
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
-          maxZoom={20}
-        />
-        {trail.length >= 2 && (
-          <Polyline
-            positions={trail}
-            pathOptions={{ color: '#3b82f6', weight: 3, opacity: 0.7 }}
+      {renderKey === 0 ? (
+        <MapContainer
+          center={pos}
+          zoom={17}
+          style={{ height: '220px', width: '100%', background: '#0d1520' }}
+          zoomControl={false}
+          attributionControl={false}
+        >
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            subdomains="abcd"
+            maxZoom={20}
           />
-        )}
-        <PlayerMarker position={pos} />
-      </MapContainer>
+          <TrailPolyline lat={lat} lng={lng} />
+          <PlayerMarker position={pos} />
+        </MapContainer>
+      ) : (
+        <MapContainer
+          center={pos}
+          zoom={17}
+          style={{ height: '220px', width: '100%', background: '#0d1520' }}
+          zoomControl={false}
+          attributionControl={false}
+        >
+          <TileLayer
+            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            subdomains="abcd"
+            maxZoom={20}
+          />
+          <TrailPolyline lat={lat} lng={lng} />
+          <PlayerMarker position={pos} />
+        </MapContainer>
+      )}
 
       {/* progress overlay */}
       <div style={{
@@ -145,4 +150,39 @@ export default function TravelMap({ currentLocation, motionState, progress, goal
       </div>
     </div>
   );
+}
+
+function TrailPolyline({ lat, lng }: { lat: number; lng: number }) {
+  const map = useMap();
+  const polylineRef = useRef<L.Polyline | null>(null);
+  const trailRef = useRef<[number, number][]>([]);
+
+  useEffect(() => {
+    const pos: [number, number] = [lat, lng];
+    const last = trailRef.current[trailRef.current.length - 1];
+    if (!last || last[0] !== lat || last[1] !== lng) {
+      trailRef.current = [...trailRef.current, pos].slice(-MAX_TRAIL_POINTS);
+    }
+
+    if (polylineRef.current) {
+      polylineRef.current.remove();
+    }
+
+    if (trailRef.current.length >= 2) {
+      polylineRef.current = L.polyline(trailRef.current, {
+        color: '#3b82f6',
+        weight: 3,
+        opacity: 0.7,
+      }).addTo(map);
+    }
+
+    return () => {
+      if (polylineRef.current) {
+        polylineRef.current.remove();
+        polylineRef.current = null;
+      }
+    };
+  }, [map, lat, lng]);
+
+  return null;
 }
