@@ -76,7 +76,7 @@ export default function Home() {
   const prevXpRef = useRef<number | null>(null);
 
   const lastLocation = gameState?.player.lastLocation ?? null;
-  const { location, error, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist } = useLocation(lastLocation, locationEnabled);
+  const { location, error, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist, motionState, debugInfo } = useLocation(lastLocation, locationEnabled);
   const distanceFromLast = lastMovementDistance;
 
   const lastLocationForQuest = useMemo(() => (location ?? lastLocation)
@@ -1128,6 +1128,17 @@ export default function Home() {
                     <div>speed: <span style={{ color: currentSpeed !== null ? (currentSpeed > 10 ? '#ef4444' : '#4ade80') : '#6a8898' }}>{currentSpeed !== null ? `${currentSpeed.toFixed(1)}m/s` : 'N/A'}</span></div>
                     <div>cumulative: <span style={{ color: '#d4a030' }}>{cumulativeDistance.toFixed(1)} m</span></div>
                     <div>lastMovement: <span style={{ color: '#d4a030' }}>{lastMovementDistance.toFixed(1)} m</span></div>
+                    <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #1e2e3e' }}>WINDOW:</div>
+                    <div>windowDist: <span style={{ color: '#93c5fd' }}>{debugInfo.windowDistance.toFixed(1)}m</span></div>
+                    <div>rawDelta: <span style={{ color: debugInfo.rawDelta > 5 ? '#fca5a5' : '#6a8898' }}>{debugInfo.rawDelta.toFixed(2)}m</span></div>
+                    <div>smoothed: <span style={{ color: '#d4a030' }}>{debugInfo.smoothedDelta.toFixed(2)}m</span></div>
+                    <div>clamped: <span style={{ color: debugInfo.clampedDelta > 0 ? '#4ade80' : '#6a8898' }}>{debugInfo.clampedDelta.toFixed(2)}m</span></div>
+                    <div>points: <span style={{ color: '#6a8898' }}>{debugInfo.pointCount}</span></div>
+                    <div>valid: <span style={{ color: debugInfo.isValid ? '#4ade80' : '#ef4444' }}>{debugInfo.isValid ? 'YES' : 'NO'}</span></div>
+                    <div>speed: <span style={{ color: debugInfo.gpsSpeed > 0.3 ? '#4ade80' : '#6a8898' }}>{debugInfo.gpsSpeed.toFixed(2)}m/s</span></div>
+                    <div>recent: <span style={{ color: debugInfo.recentSpeed > 0.3 ? '#4ade80' : '#6a8898' }}>{debugInfo.recentSpeed.toFixed(2)}m/s</span></div>
+                    <div>state: <span style={{ color: motionState === 'walking' ? '#4ade80' : motionState === 'movingFast' ? '#fca5a5' : '#6a8898' }}>{motionState ?? 'N/A'}</span>
+                    <span style={{ color: '#f59e0b', marginLeft: '8px' }}>| stable: {debugInfo.stableState}</span></div>
                   </div>
 
                   {/* Actions */}
