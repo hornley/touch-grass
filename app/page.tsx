@@ -18,7 +18,7 @@ import {
   fetchNearbyPois,
 } from '@/lib/game';
 import { useLocation } from '@/lib/useLocation';
-import { saveSession, loadSession } from '@/lib/sessionManager';
+import { saveSession, loadSession, clearSession } from '@/lib/sessionManager';
 import { CameraCapture } from '@/components/CameraCapture';
 import { PoseDetection } from '@/components/PoseDetection';
 import { ObjectDetection } from '@/components/ObjectDetection';
@@ -78,6 +78,7 @@ export default function Home() {
   const prevXpRef = useRef<number | null>(null);
   const lastUpdateRef = useRef<number>(0);
   const lastLocationRef = useRef<{ lat: number; lng: number } | null>(null);
+  const sessionProcessedRef = useRef(false);
   const UPDATE_INTERVAL = 5000; // Only update once per 5 seconds
 
   const lastLocation = gameState?.player.lastLocation ?? null;
@@ -224,7 +225,7 @@ export default function Home() {
 
   // Load session once on mount - calculate distance from saved position when returning
   useEffect(() => {
-    if (!location) return;
+    if (!location || sessionProcessedRef.current) return;
     
     const session = loadSession();
     if (!session.isNewSession && session.sessionData) {
@@ -244,8 +245,10 @@ export default function Home() {
           });
         }
       }
+      clearSession(); // Only count once, then clear
+      sessionProcessedRef.current = true;
     }
-  }, [location]); // Only once when location first available
+  }, [location]);
 
   const currentXp = gameState?.player.xp ?? null;
   const currentQuestType = gameState?.currentQuest?.type;
