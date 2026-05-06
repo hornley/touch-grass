@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { GameState } from '@/lib/types';
 import {
   loadGameState,
@@ -69,21 +69,19 @@ export default function Home() {
   const [achievementToast, setAchievementToast] = useState<string | null>(null);
   const [isTestMode, setIsTestMode] = useState(false);
   const [locationEnabled, setLocationEnabled] = useState(false);
-  const [isTracking, setIsTracking] = useState(false);
   const [visitCapturePending, setVisitCapturePending] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>('home');
   const [tabFadeKey, setTabFadeKey] = useState(0);
   const [xpSpark, setXpSpark] = useState(false);
   const prevXpRef = useRef<number | null>(null);
-  const lastUpdateRef = useRef<number>(0);
-  const UPDATE_INTERVAL = 5000; // Only update once per 5 seconds
 
   const lastLocation = gameState?.player.lastLocation ?? null;
-  const { location, error, isLoading, requestLocation, lastMovementDistance, currentAccuracy, motionState, debugInfo } = useLocation(lastLocation, locationEnabled);
+  const { location, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist } = useLocation(lastLocation, locationEnabled);
   const distanceFromLast = lastMovementDistance;
-  const lastLocationForQuest = (location ?? lastLocation)
+
+  const lastLocationForQuest = useMemo(() => (location ?? lastLocation)
     ? { lat: (location ?? lastLocation)!.lat, lng: (location ?? lastLocation)!.lng }
-    : null;
+    : null, [location, lastLocation]);
 
   const getNextQuestWithPois = useCallback(async (
     completedIds: string[],
@@ -215,29 +213,18 @@ export default function Home() {
     if (!locationEnabled) return;
 
     if (currentQuestType === 'travel') {
-      if (!isTracking) {
-        setIsTracking(true);
-      }
+      if (!isTracking) startTracking();
     } else {
-      if (isTracking) {
-        setIsTracking(false);
-      }
+      if (isTracking) stopTracking();
     }
-  }, [currentQuestType, locationEnabled, isTracking]);
+  }, [currentQuestType, locationEnabled, isTracking, startTracking, stopTracking]);
 
   useEffect(() => {
-    const now = Date.now();
     if (!gameState || !location || lastMovementDistance <= 0) return;
-    if (now - lastUpdateRef.current < UPDATE_INTERVAL) return;
-    
-    lastUpdateRef.current = now;
 
     const quest = gameState.currentQuest;
-    if (!quest || quest.type !== 'travel') return;
-    
-    const willComplete = quest.progress + distanceFromLast >= quest.goal;
-    
-    if (!willComplete) {
+    const completesTravel = quest?.type === 'travel' && quest.progress + distanceFromLast >= quest.goal;
+    if (!completesTravel) {
       setGameState(prev => {
         if (!prev) return prev;
         const newDist = (prev.player.totalDistance ?? 0) + distanceFromLast;
@@ -300,7 +287,7 @@ export default function Home() {
         chainCompleted = true;
         setQuestMessage(`CHAIN COMPLETE  ·  +${bonusXp} XP BONUS`);
         newState.currentQuest = getRandomQuest(newState.player.completedQuests, newState.player.level);
-        setIsTracking(false);
+        stopTracking();
       } else {
         const result = await getNextQuestWithPois(newState.player.completedQuests, newLevel, updatedChain, lastLocationForQuest);
         newState.currentQuest = result.quest;
@@ -321,7 +308,7 @@ export default function Home() {
      };
 
      completeTravelQuest();
-   }, [gameState, location, distanceFromLast, getNextQuestWithPois, showAchievementToasts, lastLocationForQuest]);
+   }, [gameState, location, lastMovementDistance, distanceFromLast, getNextQuestWithPois, showAchievementToasts, lastLocationForQuest, stopTracking]);
 
    const handleStart = () => {
     if (!gameState) return;
@@ -800,68 +787,20 @@ export default function Home() {
         </div>
       )}
 
-      {/* ── Quest complete modal ─── */}
+      {/* ── Quest complete message ─── */}
       {questMessage && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          style={{
-            position: 'fixed', inset: 0, zIndex: 70,
-            background: 'rgba(6, 10, 14, 0.7)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: '24px',
-            backdropFilter: 'blur(6px)',
-          }}
-          onClick={() => setQuestMessage(null)}
-        >
-          <div
-            style={{
-              width: '100%', maxWidth: '420px',
-              background: 'linear-gradient(160deg, #101a14, #0b1118)',
-              border: '1px solid rgba(74, 222, 128, 0.35)',
-              boxShadow: '0 24px 80px rgba(5, 12, 18, 0.6)',
-              padding: '22px',
-            }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-              <div>
-                <p style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px', color: '#4ade80', marginBottom: '6px' }}>
-                  QUEST COMPLETE
-                </p>
-                <p style={{ fontFamily: 'var(--font-cinzel)', fontSize: '18px', color: '#d4a030' }}>
-                  Reward Claimed
-                </p>
-              </div>
-              <button
-                onClick={() => setQuestMessage(null)}
-                style={{ color: '#93a6b3', fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}
-                aria-label="Close"
-              >
-                ×
-              </button>
-            </div>
-            <div style={{
-              fontSize: '13px', color: '#cdd8e2', lineHeight: 1.6,
-              border: '1px solid rgba(45, 110, 72, 0.4)',
-              background: 'rgba(12, 20, 18, 0.7)',
-              padding: '12px 14px',
-              marginBottom: '16px',
-            }}>
-              {questMessage}
-            </div>
-            <button
-              onClick={() => setQuestMessage(null)}
-              style={{
-                width: '100%',
-                fontFamily: 'var(--font-cinzel)', fontSize: '11px', letterSpacing: '3px',
-                color: '#0f1b14', background: 'linear-gradient(90deg, #4ade80, #a3e635)',
-                border: 'none', padding: '12px 16px', cursor: 'pointer',
-              }}
-            >
-              CONTINUE
-            </button>
-          </div>
+        <div style={{
+          position: 'fixed', top: achievementToast ? '48px' : '0', left: 0, right: 0, zIndex: 55,
+          background: 'linear-gradient(90deg, #111f18, #172a22)',
+          borderBottom: '1px solid rgba(45,110,72,0.6)',
+          padding: '11px 20px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          boxShadow: '0 4px 20px rgba(45,110,72,0.12)',
+        }}>
+          <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '11px', letterSpacing: '2px', color: '#4ade80' }}>
+            {questMessage}
+          </span>
+          <button onClick={() => setQuestMessage(null)} style={{ color: '#3d4f60', fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}>×</button>
         </div>
       )}
 
@@ -881,7 +820,25 @@ export default function Home() {
               </div>
             )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+              {/* ── Player card ─── */}
+              <div className="rune-panel" style={{ padding: '20px' }}>
+                <SectionHeader label="TERRAQUEST" />
+
+                <div className="xp-bar xp-bar--mini" style={{ marginBottom: '12px' }}>
+                  <div className="xp-bar__fill" style={{ width: `${Math.min(100, Math.max(0, xpProgress * 100))}%` }} />
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '10px', color: '#6a8898', letterSpacing: '1px' }}>
+                    {gameState.player.xp} XP &nbsp;·&nbsp; NEXT {xpForNextLevel} XP
+                    {gameState.player.level >= 3 && (
+                      <span style={{ color: '#d4a030' }}> &nbsp;·&nbsp; ×{getQuestXpMultiplier(gameState.player.level).toFixed(1)} BONUS</span>
+                    )}
+                  </span>
+                </div>
+              </div>
 
               {/* ── Quest card ─── */}
               <div key={gameState.currentQuest?.id} className="rune-panel animate-quest" style={{ padding: '20px' }}>
@@ -1021,6 +978,82 @@ export default function Home() {
                 )}
               </div>
 
+              {/* ── Location card ─── */}
+              <div className="rune-panel" style={{ padding: '16px 20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px', color: '#7a9aac' }}>
+                      COORDINATES
+                    </span>
+                    {isTracking && (
+                      <span style={{
+                        fontFamily: 'var(--font-cinzel)', fontSize: '8px', letterSpacing: '2px',
+                        color: '#4ade80', background: 'rgba(74,222,128,0.1)',
+                        border: '1px solid rgba(74,222,128,0.4)', padding: '2px 8px',
+                      }}>
+                        ● GPS ACTIVE
+                      </span>
+                    )}
+                  </div>
+                  {location && (
+                    <span style={{ fontFamily: 'var(--font-inconsolata, monospace)', fontSize: '12px', color: '#85a885' }}>
+                      {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
+                    </span>
+                  )}
+                </div>
+                {(isLoading || error || !location) && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    marginTop: '8px', padding: '8px 0',
+                  }}>
+                    {isLoading ? (
+                      <>
+                        <span className="animate-spin-compass" style={{ fontSize: '14px', color: '#d4a030' }}>◐</span>
+                        <span style={{ fontSize: '11px', color: '#d4a030', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>ACQUIRING SIGNAL</span>
+                      </>
+                    ) : error ? (
+                      <>
+                        <span style={{ fontSize: '14px', color: '#ef4444' }}>⚠</span>
+                        <span style={{ fontSize: '11px', color: '#ef4444', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>{error.toUpperCase()}</span>
+                      </>
+                    ) : location ? (
+                      <>
+                        {isTracking && (
+                          <span style={{ fontSize: '14px', color: '#4ade80', marginRight: '6px' }}>●</span>
+                        )}
+                        <span style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px' }}>
+                          {isTracking && cumulativeDistance > 0
+                            ? `TRACKING: ${Math.round(cumulativeDistance)} M`
+                            : location.lat.toFixed(5) + ', ' + location.lng.toFixed(5)}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="animate-flicker" style={{ fontSize: '14px', color: '#4e6878' }}>◦</span>
+                        <span style={{ fontSize: '11px', color: '#4e6878', letterSpacing: '2px', fontFamily: 'var(--font-cinzel)' }}>AWAITING SIGNAL</span>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {/* Normal state: still show tracking distance if active */}
+                {!isLoading && !error && location && (
+                  <div style={{
+                    display: 'flex', alignItems: 'center', gap: '8px',
+                    marginTop: '8px', padding: '8px 0',
+                  }}>
+                    {isTracking && (
+                      <span style={{ fontSize: '14px', color: '#4ade80', marginRight: '6px' }}>●</span>
+                    )}
+                    <span style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px' }}>
+                      {isTracking
+                        ? `TRACKING: ${Math.round(cumulativeDistance)} M`
+                        : location.lat.toFixed(5) + ', ' + location.lng.toFixed(5)}
+                    </span>
+                  </div>
+                )}
+              </div>
+
               {/* Debug panel */}
               {true && (
                 <div style={{
@@ -1089,23 +1122,12 @@ export default function Home() {
                   {/* GPS debug info */}
                   <div style={{ fontSize: '10px', color: '#4e6878', marginTop: '10px', padding: '8px', background: '#0d1520', borderRadius: '4px' }}>
                     <div style={{ marginBottom: '4px', color: '#6a8898' }}>GPS DEBUG:</div>
-                    <div>lat/lng: <span style={{ color: '#93c5fd' }}>{location ? `${location.lat.toFixed(5)}, ${location.lng.toFixed(5)}` : 'N/A'}</span></div>
                     <div>tracking: <span style={{ color: isTracking ? '#4ade80' : '#ef4444' }}>{isTracking ? 'ON' : 'OFF'}</span></div>
                     <div>accuracy: <span style={{ color: currentAccuracy && currentAccuracy > 100 ? '#ef4444' : '#4ade80' }}>{currentAccuracy !== null ? `${currentAccuracy.toFixed(0)}m` : 'N/A'}</span></div>
-                    <div>state: <span style={{ color: motionState === 'walking' ? '#4ade80' : motionState === 'movingFast' ? '#fca5a5' : '#6a8898' }}>{motionState ?? 'N/A'}</span>
-                    <span style={{ color: '#f59e0b', marginLeft: '8px' }}>| stable: {debugInfo.stableState}</span></div>
-                    <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #1e2e3e' }}>WINDOW:</div>
-                    <div>windowDist: <span style={{ color: '#93c5fd' }}>{debugInfo.windowDistance.toFixed(1)}m</span></div>
-                    <div>rawDelta: <span style={{ color: debugInfo.rawDelta > 5 ? '#fca5a5' : '#6a8898' }}>{debugInfo.rawDelta.toFixed(2)}m</span></div>
-                    <div>smoothed: <span style={{ color: '#d4a030' }}>{debugInfo.smoothedDelta.toFixed(2)}m</span></div>
-                    <div>clamped: <span style={{ color: debugInfo.clampedDelta > 0 ? '#4ade80' : '#6a8898' }}>{debugInfo.clampedDelta.toFixed(2)}m</span></div>
-                    <div>points: <span style={{ color: '#6a8898' }}>{debugInfo.pointCount}</span></div>
-                    <div>valid: <span style={{ color: debugInfo.isValid ? '#4ade80' : '#ef4444' }}>{debugInfo.isValid ? 'YES' : 'NO'}</span></div>
-                    <div>speed: <span style={{ color: debugInfo.gpsSpeed > 0.3 ? '#4ade80' : '#6a8898' }}>{debugInfo.gpsSpeed.toFixed(2)}m/s</span></div>
-                    <div>recent: <span style={{ color: debugInfo.recentSpeed > 0.3 ? '#4ade80' : '#6a8898' }}>{debugInfo.recentSpeed.toFixed(2)}m/s</span></div>
-                    <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #1e2e3e' }}>PROGRESS:</div>
-                    <div>lastMovement: <span style={{ color: '#d4a030' }}>{lastMovementDistance.toFixed(2)} m</span>
-                    <div>quest: <span style={{ color: gameState?.currentQuest ? (gameState.currentQuest.type === 'travel' ? '#4ade80' : '#fca5a5') : '#6a8898' }}>{gameState?.currentQuest ? `${gameState.currentQuest.type} (${gameState.currentQuest.progress}/${gameState.currentQuest.goal})` : 'NONE'}</span></div></div>
+                    <div>segment: <span style={{ color: currentSegmentDist !== null ? (currentSegmentDist < 5 ? '#ef4444' : '#4ade80') : '#6a8898' }}>{currentSegmentDist !== null ? `${currentSegmentDist.toFixed(1)}m` : 'N/A'}</span></div>
+                    <div>speed: <span style={{ color: currentSpeed !== null ? (currentSpeed > 10 ? '#ef4444' : '#4ade80') : '#6a8898' }}>{currentSpeed !== null ? `${currentSpeed.toFixed(1)}m/s` : 'N/A'}</span></div>
+                    <div>cumulative: <span style={{ color: '#d4a030' }}>{cumulativeDistance.toFixed(1)} m</span></div>
+                    <div>lastMovement: <span style={{ color: '#d4a030' }}>{lastMovementDistance.toFixed(1)} m</span></div>
                   </div>
 
                   {/* Actions */}
