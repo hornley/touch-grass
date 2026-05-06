@@ -1,52 +1,112 @@
 'use client';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Location } from './types';
-import { calculateDistance } from './game';
+import { createSlidingWindowTracker, MotionState } from './slidingWindowTracker';
 
-interface Position {
-  lat: number;
-  lng: number;
-  timestamp: number;
-  accuracy: number;
+interface DebugInfo {
+  windowDistance: number;
+  rawDelta: number;
+  smoothedDelta: number;
+  clampedDelta: number;
+  pointCount: number;
+  windowDuration: number;
+  isValid: boolean;
+  gpsSpeed: number;
+  recentSpeed: number;
+  stableState: MotionState;
 }
 
 interface UseLocationResult {
   location: Location | null;
   error: string | null;
   isLoading: boolean;
-  isTracking: boolean;
   requestLocation: () => Promise<void>;
-  startTracking: () => void;
-  stopTracking: () => void;
-  cumulativeDistance: number;
   lastMovementDistance: number;
   currentAccuracy: number | null;
-  currentSpeed: number | null;
-  currentSegmentDist: number | null;
+  motionState: MotionState | null;
+  debugInfo: DebugInfo;
 }
 
-// Mobile browsers often report 30-100m accuracy, especially at cold start.
-// Keep this fairly permissive, and rely on MIN_MOVEMENT + MAX_SPEED_MPS to
-// filter jitter and vehicle-speed jumps.
-const MIN_ACCURACY = 100;
-// Lowered from 5m - GPS updates frequently so we can use smaller increments.
-// 1m lets even short steps count while still filtering noise.
-const MIN_MOVEMENT = 1;
-const MAX_SPEED_MPS = 10;
+const MIN_ACCURACY = 50;
+
+function getMultiplier(state: MotionState): number {
+  switch (state) {
+    case 'walking':
+      return 1.0;
+    case 'movingFast':
+      return 0.3;
+    case 'idle':
+    default:
+      return 0;
+  }
+}
 
 export function useLocation(lastLocation: Location | null, enabled: boolean = false): UseLocationResult {
   const [location, setLocation] = useState<Location | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isTracking, setIsTracking] = useState(false);
-  const [cumulativeDistance, setCumulativeDistance] = useState(0);
   const [lastMovementDistance, setLastMovementDistance] = useState(0);
   const [currentAccuracy, setCurrentAccuracy] = useState<number | null>(null);
-  const [currentSpeed, setCurrentSpeed] = useState<number | null>(null);
-  const [currentSegmentDist, setCurrentSegmentDist] = useState<number | null>(null);
+  const [motionState, setMotionState] = useState<MotionState | null>(null);
 
-  const watchIdRef = useRef<number | null>(null);
-  const lastProcessedRef = useRef<{ lat: number; lng: number; time: number; accuracy: number } | null>(null);
+  const [debugInfo, setDebugInfo] = useState<DebugInfo>({
+    windowDistance: 0,
+    rawDelta: 0,
+    smoothedDelta: 0,
+    clampedDelta: 0,
+    pointCount: 0,
+    windowDuration: 0,
+    isValid: false,
+    gpsSpeed: 0,
+    recentSpeed: 0,
+    stableState: 'idle',
+  });
+
+  const slidingWindowRef = useRef(createSlidingWindowTracker());
+  const intervalRef = useRef<number | null>(null);
+
+  const processLocation = useCallback((
+    lat: number,
+    lng: number,
+    accuracy: number,
+    timestamp: number
+  ) => {
+    slidingWindowRef.current.addPosition(lat, lng, accuracy, timestamp);
+
+    const metrics = slidingWindowRef.current.getMetrics();
+    const clampedDelta = metrics.clampedDelta;
+
+    const multiplier = getMultiplier(metrics.stableState);
+    const progressDelta = clampedDelta * multiplier;
+
+    setMotionState(metrics.stableState);
+    setDebugInfo({
+      windowDistance: metrics.windowDistance,
+      rawDelta: metrics.rawDelta,
+      smoothedDelta: metrics.smoothedDelta,
+      clampedDelta: metrics.clampedDelta,
+      pointCount: metrics.pointCount,
+      windowDuration: metrics.windowDuration,
+      isValid: metrics.isValid,
+      gpsSpeed: metrics.gpsSpeed,
+      recentSpeed: metrics.recentSpeed,
+      stableState: metrics.stableState,
+    });
+
+    if (metrics.isValid && progressDelta > 0) {
+      setLastMovementDistance(progressDelta);
+    } else {
+      setLastMovementDistance(0);
+    }
+
+    setCurrentAccuracy(accuracy);
+
+    setLocation({
+      lat,
+      lng,
+      timestamp,
+    });
+  }, []);
 
   const requestLocation = useCallback(async () => {
     setIsLoading(true);
@@ -57,12 +117,7 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
     const simLng = params.get('lng');
 
     if (simLat && simLng) {
-      const simulatedLocation: Location = {
-        lat: parseFloat(simLat),
-        lng: parseFloat(simLng),
-        timestamp: Date.now(),
-      };
-      setLocation(simulatedLocation);
+      processLocation(parseFloat(simLat), parseFloat(simLng), 5, Date.now());
       setIsLoading(false);
       return;
     }
@@ -75,19 +130,23 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
 
     try {
       const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-         navigator.geolocation.getCurrentPosition(resolve, reject, {
-           enableHighAccuracy: true,
-           timeout: 10000,
-           maximumAge: 300000,
-         });
-       });
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        });
+      });
 
-      const newLocation: Location = {
-        lat: pos.coords.latitude,
-        lng: pos.coords.longitude,
-        timestamp: Date.now(),
-      };
-      setLocation(newLocation);
+      const accuracy = pos.coords.accuracy;
+
+      if (accuracy > MIN_ACCURACY) {
+        setCurrentAccuracy(accuracy);
+        setError(`Accuracy too poor: ${accuracy.toFixed(0)}m`);
+        setIsLoading(false);
+        return;
+      }
+
+      processLocation(pos.coords.latitude, pos.coords.longitude, accuracy, Date.now());
     } catch (err) {
       const ge = err as GeolocationPositionError;
       if (ge.code === ge.PERMISSION_DENIED) {
@@ -102,99 +161,40 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [processLocation]);
 
-  const startTracking = useCallback(() => {
-    if (isTracking || !navigator.geolocation) return;
+  const fetchLocation = useCallback(async () => {
+    const params = new URLSearchParams(window.location.search);
+    const simLat = params.get('lat');
+    const simLng = params.get('lng');
 
-    setIsTracking(true);
-    setCumulativeDistance(0);
-    setLastMovementDistance(0);
-    lastProcessedRef.current = null;
-
-    watchIdRef.current = navigator.geolocation.watchPosition(
-      (pos) => {
-        const accuracy = pos.coords.accuracy;
-
-        const newPos: Position = {
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          timestamp: Date.now(),
-          accuracy,
-        };
-
-        // Default: avoid reusing a previous non-zero movement value.
-        setLastMovementDistance(0);
-        setCurrentSpeed(null);
-        setCurrentSegmentDist(null);
-
-        if (lastProcessedRef.current) {
-          const timeDiff = (newPos.timestamp - lastProcessedRef.current.time) / 1000;
-          if (timeDiff > 0) {
-            const segmentDist = calculateDistance(
-              lastProcessedRef.current.lat, lastProcessedRef.current.lng,
-              newPos.lat, newPos.lng
-            );
-
-            const speedMps = segmentDist / timeDiff;
-            // Only check current accuracy - previous reading being slightly off is okay
-            // since we're measuring distance between two points.
-            const accurateEnough = newPos.accuracy <= MIN_ACCURACY;
-
-            // Always set debug values so we can see what's happening
-            setCurrentSegmentDist(segmentDist);
-            setCurrentSpeed(speedMps);
-
-            if (accurateEnough && speedMps <= MAX_SPEED_MPS && segmentDist >= MIN_MOVEMENT) {
-              setCumulativeDistance((prevDist) => prevDist + segmentDist);
-              setLastMovementDistance(segmentDist);
-            }
-          }
-        }
-
-        lastProcessedRef.current = {
-          lat: newPos.lat,
-          lng: newPos.lng,
-          time: newPos.timestamp,
-          accuracy: newPos.accuracy,
-        };
-
-        setLocation({
-          lat: newPos.lat,
-          lng: newPos.lng,
-          timestamp: newPos.timestamp,
-        });
-        setCurrentAccuracy(newPos.accuracy);
-      },
-       (err) => {
-         console.error('Watch position error:', err);
-         const ge = err as GeolocationPositionError;
-         if (ge.code === ge.PERMISSION_DENIED) {
-           setError('Location permission denied. Please enable location access.');
-         } else if (ge.code === ge.POSITION_UNAVAILABLE) {
-           setError('Location information unavailable.');
-         } else if (ge.code === ge.TIMEOUT) {
-           setError('Location update timed out.');
-         } else {
-           setError('Failed to track location.');
-         }
-       },
-      {
-        enableHighAccuracy: true,
-        // Don’t force 3s timeouts; watchPosition cadence is device/browser-driven.
-        timeout: 10000,
-        maximumAge: 0,
-      }
-    );
-  }, [isTracking]);
-
-  const stopTracking = useCallback(() => {
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
+    if (simLat && simLng) {
+      processLocation(parseFloat(simLat), parseFloat(simLng), 5, Date.now());
+      return;
     }
-    setIsTracking(false);
-  }, []);
+
+    if (!navigator.geolocation) return;
+
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 0,
+        });
+      });
+
+      const accuracy = pos.coords.accuracy;
+
+      if (accuracy > MIN_ACCURACY) {
+        setCurrentAccuracy(accuracy);
+        return;
+      }
+
+      processLocation(pos.coords.latitude, pos.coords.longitude, accuracy, Date.now());
+    } catch {
+    }
+  }, [processLocation]);
 
   useEffect(() => {
     if (enabled && !location) {
@@ -203,25 +203,26 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
   }, [enabled, location, requestLocation]);
 
   useEffect(() => {
+    if (enabled && location) {
+      intervalRef.current = window.setInterval(fetchLocation, 5000);
+    }
+
     return () => {
-      if (watchIdRef.current !== null) {
-        navigator.geolocation.clearWatch(watchIdRef.current);
+      if (intervalRef.current !== null) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
-  }, []);
+  }, [enabled, location, fetchLocation]);
 
   return {
     location,
     error,
     isLoading,
-    isTracking,
     requestLocation,
-    startTracking,
-    stopTracking,
-    cumulativeDistance,
     lastMovementDistance,
     currentAccuracy,
-    currentSpeed,
-    currentSegmentDist,
+    motionState,
+    debugInfo,
   };
 }
