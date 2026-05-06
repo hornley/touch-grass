@@ -36,7 +36,7 @@ let movementHistory: boolean[] = [false, false, false]; // Last 3 ticks
 
 const ALPHA = 0.35;
 const MAX_DELTA = 10;
-const EPSILON = 0.2;  // Used only as OUTPUT filter, not control flow
+const EPSILON = 3;  // 3 meters minimum to filter GPS noise
 const WINDOW_MS = 45000;
 const RECENT_WINDOW_MS = 8000;
 const WALKING_SPEED_THRESHOLD = 0.3;
