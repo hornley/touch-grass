@@ -44,9 +44,25 @@ Pass `?lat=X&lng=Y` query params to bypass real GPS — `useLocation` reads thes
 
 ### Git workflow
 
-- **Check git branch** before making any changes — run `git branch` to verify you're on a feature branch
-- **Always create PR** — never push directly to `main`/`master`
-- **Create feature branch first** — `git checkout -b feature/your-feature-name` before editing
+**Before starting a new feature:**
+
+```bash
+git checkout master
+git pull --rebase
+git checkout -b feature/your-feature-name
+```
+
+If you have uncommitted changes, stash them first:
+
+```bash
+git stash
+git checkout master && git pull --rebase
+git checkout -b feature/your-feature-name
+git stash pop
+```
+
+- **Check branch** — run `git branch` before making any changes
+- **Always create PR** — never push directly to `master`
 
 ## Stack
 
