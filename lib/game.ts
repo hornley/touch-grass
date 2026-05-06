@@ -15,6 +15,7 @@ export const ACHIEVEMENTS = [
 ];
 
 export const QUEST_POOL: Omit<Quest, 'status' | 'progress'>[] = [
+  { id: 'quest_4', type: 'travel', goal: 20,  xpReward: 10, description: 'Walk 20 meters to test movement' },
   { id: 'quest_5', type: 'travel', goal: 100,  xpReward: 20, description: 'Walk 100 meters to explore new territory' },
   { id: 'quest_7', type: 'travel', goal: 1000, xpReward: 50, description: 'Walk 1 kilometer — a true explorer', minLevel: 5 },
   { id: 'quest_8', type: 'meditate', goal: 30, xpReward: 25, description: 'Meditate for 30 seconds' },
@@ -151,22 +152,17 @@ export async function fetchNearbyPois(lat: number, lng: number, radius: number =
     out center tags;
   `;
 
-  try {
-    const response = await fetch('https://overpass-api.de/api/interpreter', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `data=${encodeURIComponent(query)}`,
-    });
+  const response = await fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    body: query,
+  });
 
-    if (!response.ok) return [];
-    const data = await response.json();
-    const items = formatPoiResults(data.elements ?? []);
-    const cache: CachedPois = { timestamp: Date.now(), items };
-    localStorage.setItem(cacheKey, JSON.stringify(cache));
-    return items;
-  } catch {
-    return [];
-  }
+  if (!response.ok) return [];
+  const data = await response.json();
+  const items = formatPoiResults(data.elements ?? []);
+  const cache: CachedPois = { timestamp: Date.now(), items };
+  localStorage.setItem(cacheKey, JSON.stringify(cache));
+  return items;
 }
 
 function pickRandom<T>(items: T[]): T {
