@@ -175,15 +175,15 @@ export default function Home() {
         const now = Date.now();
         const lastLoc = lastLocationRef.current;
         
-        // Save to session manager with position
-        saveSession(
-          gameState.player.totalDistance,
-          gameState.currentQuest?.progress ?? 0,
-          gameState.currentQuest?.id ?? null,
-          gameState.currentQuest?.goal ?? 100,
-          lastLoc?.lat ?? null,
-          lastLoc?.lng ?? null
-        );
+        // TEMP DISABLED FOR TESTING
+        // saveSession(
+        //   gameState.player.totalDistance,
+        //   gameState.currentQuest?.progress ?? 0,
+        //   gameState.currentQuest?.id ?? null,
+        //   gameState.currentQuest?.goal ?? 100,
+        //   lastLoc?.lat ?? null,
+        //   lastLoc?.lng ?? null
+        // );
         
         setGameState(prev => {
           if (!prev) return prev;
@@ -224,6 +224,8 @@ export default function Home() {
   }, [gameState]);
 
   // Load session once on mount - calculate distance from saved position when returning
+  // TEMP DISABLED FOR TESTING
+  /*
   useEffect(() => {
     if (!location || sessionProcessedRef.current) return;
     
@@ -249,6 +251,7 @@ export default function Home() {
       sessionProcessedRef.current = true;
     }
   }, [location]);
+  */
 
   const currentXp = gameState?.player.xp ?? null;
   const currentQuestType = gameState?.currentQuest?.type;
