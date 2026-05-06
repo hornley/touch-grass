@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { GameState } from '@/lib/types';
 import {
   loadGameState,
@@ -76,11 +76,12 @@ export default function Home() {
   const prevXpRef = useRef<number | null>(null);
 
   const lastLocation = gameState?.player.lastLocation ?? null;
-  const { location, error, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist } = useLocation(lastLocation, locationEnabled);
+  const { location, isLoading, isTracking, startTracking, stopTracking, cumulativeDistance, lastMovementDistance, currentAccuracy, currentSpeed, currentSegmentDist } = useLocation(lastLocation, locationEnabled);
   const distanceFromLast = lastMovementDistance;
-  const lastLocationForQuest = (location ?? lastLocation)
+
+  const lastLocationForQuest = useMemo(() => (location ?? lastLocation)
     ? { lat: (location ?? lastLocation)!.lat, lng: (location ?? lastLocation)!.lng }
-    : null;
+    : null, [location, lastLocation]);
 
   const getNextQuestWithPois = useCallback(async (
     completedIds: string[],
@@ -307,7 +308,7 @@ export default function Home() {
      };
 
      completeTravelQuest();
-   }, [gameState, location, distanceFromLast, getNextQuestWithPois, showAchievementToasts, lastLocationForQuest, stopTracking]);
+   }, [gameState, location, lastMovementDistance, distanceFromLast, getNextQuestWithPois, showAchievementToasts, lastLocationForQuest, stopTracking]);
 
    const handleStart = () => {
     if (!gameState) return;
