@@ -64,6 +64,14 @@ git stash pop
 - **Check branch** — run `git branch` before making any changes
 - **Always create PR** — never push directly to `master`
 
+### Merge conflict plan
+
+1. Abort bad state: `git merge --abort` or `git rebase --abort`
+2. Rebase on latest: `git fetch origin master` then `git rebase origin/master`
+3. Resolve conflicts file-by-file, prefer upstream structure and re-apply local changes via patch
+4. Verify after each file: `npm run build`
+5. Continue without editor: `GIT_EDITOR=true git rebase --continue`
+
 ## Stack
 
 Next.js 16, React 19, TypeScript, Tailwind v4 (PostCSS plugin), no external state library.
