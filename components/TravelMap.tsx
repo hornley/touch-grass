@@ -1,7 +1,6 @@
 // components/TravelMap.tsx
 'use client';
-import { useEffect, useRef, useMemo, useState } from 'react';
-import { MapContainer, TileLayer, useMap } from 'react-leaflet';
+import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Location } from '@/lib/types';
@@ -16,18 +15,57 @@ L.Icon.Default.mergeOptions({
 
 const MAX_TRAIL_POINTS = 80;
 
-function PlayerMarker({ position }: { position: [number, number] }) {
-  const map = useMap();
+interface TravelMapProps {
+  currentLocation: Location;
+  motionState: MotionState | null;
+  progress: number;
+  goal: number;
+}
+
+export default function TravelMap({ currentLocation, motionState, progress, goal }: TravelMapProps) {
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  const polylineRef = useRef<L.Polyline | null>(null);
+  const trailRef = useRef<[number, number][]>([]);
+  const initializedRef = useRef(false);
+
+  const lat = currentLocation.lat;
+  const lng = currentLocation.lng;
+  const pos: [number, number] = [lat, lng];
+  const pct = Math.min(100, Math.round((progress / goal) * 100));
 
   useEffect(() => {
-    map.setView(position, map.getZoom(), { animate: true, duration: 0.5 });
-  }, [map, position]);
+    if (!mapContainerRef.current || initializedRef.current) return;
+
+    const map = L.map(mapContainerRef.current, {
+      center: pos,
+      zoom: 17,
+      zoomControl: false,
+      attributionControl: false,
+    });
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd',
+      maxZoom: 20,
+    }).addTo(map);
+
+    mapRef.current = map;
+    initializedRef.current = true;
+
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+        initializedRef.current = false;
+      }
+    };
+  }, []);
 
   useEffect(() => {
-    if (markerRef.current) {
-      markerRef.current.remove();
-    }
+    if (!mapRef.current) return;
+    const map = mapRef.current;
+
     const icon = L.divIcon({
       className: '',
       html: `
@@ -41,79 +79,42 @@ function PlayerMarker({ position }: { position: [number, number] }) {
       iconSize: [14, 14],
       iconAnchor: [7, 7],
     });
-    markerRef.current = L.marker(position, { icon }).addTo(map);
-    return () => {
-      if (markerRef.current) {
-        markerRef.current.remove();
-        markerRef.current = null;
-      }
-    };
-  }, [map, position]);
 
-  return null;
-}
-
-interface TravelMapProps {
-  currentLocation: Location;
-  motionState: MotionState | null;
-  progress: number;
-  goal: number;
-}
-
-export default function TravelMap({ currentLocation, motionState, progress, goal }: TravelMapProps) {
-  const lat = currentLocation.lat;
-  const lng = currentLocation.lng;
-  const pos: [number, number] = [lat, lng];
-
-  const [renderKey, setRenderKey] = useState(0);
-  const prevPosRef = useRef<string>('');
-
-  const posKey = useMemo(() => `${lat.toFixed(5)},${lng.toFixed(5)}`, [lat, lng]);
+    if (markerRef.current) {
+      markerRef.current.remove();
+    }
+    markerRef.current = L.marker(pos, { icon }).addTo(map);
+    map.setView(pos, map.getZoom(), { animate: true, duration: 0.5 });
+  }, [lat, lng]);
 
   useEffect(() => {
-    if (prevPosRef.current && prevPosRef.current !== posKey) {
-      setRenderKey((k) => k + 1);
-    }
-    prevPosRef.current = posKey;
-  }, [posKey]);
+    if (!mapRef.current) return;
+    const map = mapRef.current;
 
-  const pct = Math.min(100, Math.round((progress / goal) * 100));
+    const last = trailRef.current[trailRef.current.length - 1];
+    if (!last || last[0] !== lat || last[1] !== lng) {
+      trailRef.current = [...trailRef.current, pos].slice(-MAX_TRAIL_POINTS);
+    }
+
+    if (polylineRef.current) {
+      polylineRef.current.remove();
+    }
+
+    if (trailRef.current.length >= 2) {
+      polylineRef.current = L.polyline(trailRef.current, {
+        color: '#3b82f6',
+        weight: 3,
+        opacity: 0.7,
+      }).addTo(map);
+    }
+  }, [lat, lng]);
 
   return (
     <div style={{ position: 'relative', borderRadius: '2px', overflow: 'hidden', border: '1px solid #2a3d52' }}>
-      {renderKey === 0 ? (
-        <MapContainer
-          center={pos}
-          zoom={17}
-          style={{ height: '220px', width: '100%', background: '#0d1520' }}
-          zoomControl={false}
-          attributionControl={false}
-        >
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            subdomains="abcd"
-            maxZoom={20}
-          />
-          <TrailPolyline lat={lat} lng={lng} />
-          <PlayerMarker position={pos} />
-        </MapContainer>
-      ) : (
-        <MapContainer
-          center={pos}
-          zoom={17}
-          style={{ height: '220px', width: '100%', background: '#0d1520' }}
-          zoomControl={false}
-          attributionControl={false}
-        >
-          <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-            subdomains="abcd"
-            maxZoom={20}
-          />
-          <TrailPolyline lat={lat} lng={lng} />
-          <PlayerMarker position={pos} />
-        </MapContainer>
-      )}
+      <div
+        ref={mapContainerRef}
+        style={{ height: '220px', width: '100%', background: '#0d1520' }}
+      />
 
       {/* progress overlay */}
       <div style={{
@@ -150,39 +151,4 @@ export default function TravelMap({ currentLocation, motionState, progress, goal
       </div>
     </div>
   );
-}
-
-function TrailPolyline({ lat, lng }: { lat: number; lng: number }) {
-  const map = useMap();
-  const polylineRef = useRef<L.Polyline | null>(null);
-  const trailRef = useRef<[number, number][]>([]);
-
-  useEffect(() => {
-    const pos: [number, number] = [lat, lng];
-    const last = trailRef.current[trailRef.current.length - 1];
-    if (!last || last[0] !== lat || last[1] !== lng) {
-      trailRef.current = [...trailRef.current, pos].slice(-MAX_TRAIL_POINTS);
-    }
-
-    if (polylineRef.current) {
-      polylineRef.current.remove();
-    }
-
-    if (trailRef.current.length >= 2) {
-      polylineRef.current = L.polyline(trailRef.current, {
-        color: '#3b82f6',
-        weight: 3,
-        opacity: 0.7,
-      }).addTo(map);
-    }
-
-    return () => {
-      if (polylineRef.current) {
-        polylineRef.current.remove();
-        polylineRef.current = null;
-      }
-    };
-  }, [map, lat, lng]);
-
-  return null;
 }
