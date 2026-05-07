@@ -23,6 +23,19 @@ interface NearbyPlayer {
 
 type LeaderboardType = 'quests' | 'level';
 
+const HIDE_TEST_PLACEHOLDERS = true;
+
+function isTestPlaceholder(entry: LeaderboardEntry | NearbyPlayer): boolean {
+  if (!HIDE_TEST_PLACEHOLDERS) return false;
+  const isTraveler = /^Traveler #/.test(entry.username);
+  const isLevelOne = entry.level === 1;
+  // nearby uses level only, leaderboard uses questsCompleted
+  const hasNoProgress = 'questsCompleted' in entry 
+    ? (entry.level === 1 && entry.xp === 0 && entry.questsCompleted === 0)
+    : (entry.level === 1);
+  return isTraveler && hasNoProgress;
+}
+
 function SectionHeader({ label, right }: { label: string; right?: React.ReactNode }) {
   return (
     <div className="section-divider">
@@ -152,7 +165,7 @@ export function LeaderboardTab({ gameState }: { gameState: GameState }) {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {leaderboard.slice(0, 50).map(entry => {
+            {leaderboard.slice(0, 50).filter(e => !isTestPlaceholder(e)).map(entry => {
               const isMe = entry.playerId === playerId;
               return (
                 <div key={entry.playerId} className="rune-panel" style={{
@@ -213,7 +226,7 @@ export function LeaderboardTab({ gameState }: { gameState: GameState }) {
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            {nearby.map(player => {
+            {nearby.filter(e => !isTestPlaceholder(e)).map(player => {
               const isMe = player.playerId === playerId;
               return (
                 <div key={player.playerId} className="rune-panel" style={{
