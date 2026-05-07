@@ -267,6 +267,8 @@ export function getNextQuest(
 export function getInitialState(): GameState {
   return {
     player: {
+      playerId: undefined,
+      username: undefined,
       xp: 0,
       level: 1,
       lastLocation: null,
