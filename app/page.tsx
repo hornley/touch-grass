@@ -94,6 +94,8 @@ export default function Home() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [loadingNextQuest, setLoadingNextQuest] = useState(false);
   const timerExpiredFired = useRef(false);
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
 
   const lastLocation = gameState?.player.lastLocation ?? null;
   const { location, error, isLoading, requestLocation, lastMovementDistance, currentAccuracy, motionState, debugInfo } = useLocation(lastLocation, locationEnabled);
@@ -105,6 +107,21 @@ export default function Home() {
   const currentEventWindow = useMemo(() => {
     return isEventWindow(location?.lat ?? 0, location?.lng ?? 0);
   }, [location?.lat, location?.lng]);
+
+  const handleReset = useCallback(async () => {
+    if (resetConfirmText !== 'RESET') return;
+    setLoadingNextQuest(true);
+    try {
+      const res = await fetch('/api/admin/cleanup-test-accounts', { method: 'POST' });
+      const data = await res.json();
+      setQuestMessage(`CLEANUP: ${data.deletedPlayers} players, ${data.deletedPresence} presence`);
+    } catch {
+      setQuestMessage('Cleanup failed');
+    }
+    setLoadingNextQuest(false);
+    setResetModalOpen(false);
+    setResetConfirmText('');
+  }, [resetConfirmText]);
 
   const getNextQuestWithPois = useCallback(async (
     completedIds: string[],
@@ -1264,6 +1281,77 @@ export default function Home() {
         </div>
       )}
 
+      {/* ── Cleanup reset modal ─── */}
+      {resetModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 70,
+            background: 'rgba(6, 10, 14, 0.7)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '24px',
+            backdropFilter: 'blur(6px)',
+          }}
+          onClick={() => setResetModalOpen(false)}
+        >
+          <div
+            style={{
+              width: '100%', maxWidth: '420px',
+              background: 'linear-gradient(160deg, #101a14, #0b1118)',
+              border: '1px solid rgba(239,68,68,0.35)',
+              boxShadow: '0 24px 80px rgba(5, 12, 18, 0.6)',
+              padding: '22px',
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+              <div>
+                <p style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px', color: '#fca5a5', marginBottom: '6px' }}>
+                  CLEANUP TEST ACCOUNTS
+                </p>
+                <p style={{ fontFamily: 'var(--font-cinzel)', fontSize: '18px', color: '#d4a030' }}>
+                  Removes Traveler # accounts with no progress
+                </p>
+              </div>
+              <button onClick={() => setResetModalOpen(false)} style={{ color: '#93a6b3', fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}>
+                ×
+              </button>
+            </div>
+            <div style={{ fontSize: '13px', color: '#cdd8e2', lineHeight: 1.6, border: '1px solid rgba(69,55,45,0.4)', background: 'rgba(12,20,18,0.7)', padding: '12px 14px', marginBottom: '16px' }}>
+              Type <strong>RESET</strong> to confirm deletion
+            </div>
+            <input
+              type="text"
+              value={resetConfirmText}
+              onChange={(e) => setResetConfirmText(e.target.value)}
+              placeholder="RESET"
+              style={{
+                width: '100%',
+                fontFamily: 'var(--font-cinzel)',
+                fontSize: '14px',
+                letterSpacing: '2px',
+                color: '#d4a030',
+                background: 'transparent',
+                border: '1px solid #2a3d52',
+                padding: '12px 16px',
+                textAlign: 'center',
+                marginBottom: '16px',
+                outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={() => setResetModalOpen(false)} style={{ flex: 1, fontFamily: 'var(--font-cinzel)', fontSize: '11px', letterSpacing: '3px', color: '#6a8898', background: 'none', border: '1px solid #2a3d52', padding: '12px 16px', cursor: 'pointer' }}>
+                CANCEL
+              </button>
+              <button onClick={handleReset} disabled={resetConfirmText !== 'RESET'} style={{ flex: 1, fontFamily: 'var(--font-cinzel)', fontSize: '11px', letterSpacing: '3px', color: resetConfirmText !== 'RESET' ? '#6a8898' : '#fca5a5', background: 'none', border: '1px solid #ef4444', padding: '12px 16px', cursor: resetConfirmText !== 'RESET' ? 'not-allowed' : 'pointer', opacity: resetConfirmText !== 'RESET' ? 0.6 : 1 }}>
+                DELETE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Quest complete modal ─── */}
       {questMessage && (
         <div
@@ -1573,6 +1661,25 @@ export default function Home() {
                     >
                       ABANDON QUEST
                     </button>
+
+                    {process.env.NEXT_PUBLIC_ALLOW_DB_RESET === 'true' && (
+                      <button
+                        onClick={() => setResetModalOpen(true)}
+                        style={{
+                          marginTop: '16px',
+                          fontFamily: 'var(--font-cinzel)',
+                          fontSize: '10px',
+                          letterSpacing: '3px',
+                          color: '#ef4444',
+                          background: 'none',
+                          border: '1px solid #ef4444',
+                          padding: '10px 16px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        CLEANUP
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
