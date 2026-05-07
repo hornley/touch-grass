@@ -25,9 +25,10 @@ import { ObjectDetection } from '@/components/ObjectDetection';
 import { BottomNav } from '@/components/BottomNav';
 import { StatsTab } from '@/components/StatsTab';
 import { AchievementsTab } from '@/components/AchievementsTab';
+import { LeaderboardTab } from '@/components/LeaderboardTab';
 import { TravelMapWrapper } from '@/components/TravelMapWrapper';
 
-type Tab = 'home' | 'stats' | 'achievements';
+type Tab = 'home' | 'stats' | 'achievements' | 'rivals';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -66,6 +67,8 @@ function DotGrid() {
 export default function Home() {
   const [gameState, setGameState] = useState<GameState | null>(null);
   const [showWelcome, setShowWelcome] = useState<boolean | null>(null);
+  const [showUsernameSetup, setShowUsernameSetup] = useState(false);
+  const [usernameInput, setUsernameInput] = useState('');
   const [returnReward, setReturnReward] = useState<{ minutes: number; xp: number } | null>(null);
   const [questMessage, setQuestMessage] = useState<string | null>(null);
   const [achievementToast, setAchievementToast] = useState<string | null>(null);
@@ -80,6 +83,7 @@ export default function Home() {
   const prevXpRef = useRef<number | null>(null);
   const lastUpdateRef = useRef<number>(0);
   const UPDATE_INTERVAL = 5000; // Only update once per 5 seconds
+  const [migrated, setMigrated] = useState(false);
 
   const lastLocation = gameState?.player.lastLocation ?? null;
   const { location, error, isLoading, requestLocation, lastMovementDistance, currentAccuracy, motionState, debugInfo } = useLocation(lastLocation, locationEnabled);
@@ -152,6 +156,94 @@ export default function Home() {
     setShowWelcome(isNewUser);
     if (streakExtended && !isNewUser) setAchievementToast(`🔥 ${streakResult.streak}-DAY STREAK`);
   }, []);
+
+  // Migration: sync localStorage player to MongoDB
+  useEffect(() => {
+    if (!gameState || migrated) return;
+
+    const migrate = async () => {
+      const player = gameState.player;
+      if (!player.playerId) {
+        // No playerId yet — create new player in DB
+        try {
+          const res = await fetch('/api/players', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: player.username || `Traveler #${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
+              level: player.level,
+              xp: player.xp,
+              questsCompleted: player.completedQuests.length,
+              totalDistance: player.totalDistance,
+              achievements: player.achievements,
+              lastLocation: player.lastLocation,
+            }),
+          });
+          const data = await res.json();
+          const newPlayerId = data.playerId;
+          setGameState(prev => {
+            if (!prev) return prev;
+            const updated = {
+              ...prev,
+              player: { ...prev.player, playerId: newPlayerId },
+            };
+            saveGameState(updated);
+            return updated;
+          });
+          // Sync presence
+          if (player.lastLocation) {
+            await fetch('/api/presence', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                playerId: newPlayerId,
+                username: data.username,
+                lat: player.lastLocation.lat,
+                lng: player.lastLocation.lng,
+              }),
+            });
+          }
+        } catch {
+          // Migration failed — continue with local state
+        }
+      } else {
+        // Has playerId — upsert with current state
+        try {
+          await fetch('/api/players', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              playerId: player.playerId,
+              username: player.username || `Traveler #${player.playerId?.slice(-5).toUpperCase()}` || 'Traveler',
+              level: player.level,
+              xp: player.xp,
+              questsCompleted: player.completedQuests.length,
+              totalDistance: player.totalDistance,
+              achievements: player.achievements,
+              lastLocation: player.lastLocation,
+            }),
+          });
+          if (player.lastLocation) {
+            await fetch('/api/presence', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                playerId: player.playerId,
+                username: `Traveler #${player.playerId.slice(-5).toUpperCase()}`,
+                lat: player.lastLocation.lat,
+                lng: player.lastLocation.lng,
+              }),
+            });
+          }
+        } catch {
+          // Continue silently
+        }
+      }
+      setMigrated(true);
+    };
+
+    migrate();
+  }, [gameState, migrated]);
 
   const showAchievementToasts = useCallback((newIds: string[]) => {
     if (!newIds.length) return;
@@ -343,13 +435,49 @@ export default function Home() {
   }, [gameState?.currentQuest?.progress]);
 
   const handleStart = () => {
-    if (!gameState) return;
+    if (!gameState || !usernameInput.trim()) return;
+
+    const playerName = usernameInput.trim();
     setShowWelcome(false);
     setLocationEnabled(true);
+
     const start = async () => {
       if (!gameState) return;
+
+      // Save username to localStorage
+      const withName = {
+        ...gameState,
+        player: { ...gameState.player, username: playerName },
+      };
+      saveGameState(withName);
+      setGameState(withName);
+
+      // Upsert to MongoDB
+      const res = await fetch('/api/players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: playerName,
+          level: gameState.player.level,
+          xp: gameState.player.xp,
+          questsCompleted: gameState.player.completedQuests.length,
+          totalDistance: gameState.player.totalDistance,
+          achievements: gameState.player.achievements,
+          lastLocation: gameState.player.lastLocation,
+        }),
+      });
+      const data = await res.json();
+      if (data.playerId) {
+        const withId = {
+          ...withName,
+          player: { ...withName.player, playerId: data.playerId },
+        };
+        saveGameState(withId);
+        setGameState(withId);
+      }
+
       const result = await getNextQuestWithPois(gameState.player.completedQuests, gameState.player.level, gameState.player.currentChain, lastLocationForQuest);
-      const s = { ...gameState, currentQuest: result.quest, player: { ...gameState.player, currentChain: result.chain } };
+      const s = { ...withName, currentQuest: result.quest, player: { ...withName.player, currentChain: result.chain } };
       saveGameState(s);
       setGameState(s);
     };
@@ -700,18 +828,50 @@ export default function Home() {
             COMPLETE QUESTS TO RANK UP.
           </p>
 
+          {/* Username input */}
+          <div style={{ marginBottom: '28px' }}>
+            <p style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px', color: '#4e6878', marginBottom: '12px' }}>
+              CHOOSE YOUR NAME
+            </p>
+            <input
+              type="text"
+              value={usernameInput}
+              onChange={e => setUsernameInput(e.target.value)}
+              placeholder="Traveler name..."
+              maxLength={20}
+              style={{
+                width: '100%',
+                fontFamily: 'var(--font-cinzel)',
+                fontSize: '16px',
+                letterSpacing: '2px',
+                color: '#d4a030',
+                background: 'transparent',
+                border: '1px solid #2a3d52',
+                padding: '12px 16px',
+                textAlign: 'center',
+                outline: 'none',
+                transition: 'border-color 0.2s',
+              }}
+              onFocus={e => (e.target.style.borderColor = '#d4a030')}
+              onBlur={e => (e.target.style.borderColor = '#2a3d52')}
+            />
+          </div>
+
           {/* CTA button */}
           <button
             onClick={handleStart}
+            disabled={!usernameInput.trim()}
             style={{
               fontFamily: 'var(--font-cinzel, serif)', fontSize: '12px', letterSpacing: '5px',
-              color: '#d4a030', background: 'transparent',
-              border: '1px solid #d4a030',
-              padding: '16px 44px', cursor: 'pointer',
+              color: usernameInput.trim() ? '#d4a030' : '#4e6878',
+              background: 'transparent',
+              border: `1px solid ${usernameInput.trim() ? '#d4a030' : '#2a3d52'}`,
+              padding: '16px 44px', cursor: usernameInput.trim() ? 'pointer' : 'not-allowed',
               transition: 'all 0.2s',
               display: 'block', margin: '0 auto',
+              opacity: usernameInput.trim() ? 1 : 0.5,
             }}
-            onMouseEnter={e => Object.assign((e.currentTarget as HTMLElement).style, { background: 'rgba(212,160,48,0.08)', boxShadow: '0 0 24px rgba(212,160,48,0.25)' })}
+            onMouseEnter={e => usernameInput.trim() && Object.assign((e.currentTarget as HTMLElement).style, { background: 'rgba(212,160,48,0.08)', boxShadow: '0 0 24px rgba(212,160,48,0.25)' })}
             onMouseLeave={e => Object.assign((e.currentTarget as HTMLElement).style, { background: 'transparent', boxShadow: 'none' })}
           >
             BEGIN JOURNEY
@@ -788,6 +948,87 @@ export default function Home() {
           <div className="xp-bar__flare" />
         </div>
       </div>
+
+      {/* ── Username setup prompt ─── */}
+      {!gameState.player.username && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 55,
+          background: 'rgba(13,21,32,0.92)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          backdropFilter: 'blur(4px)',
+        }}>
+          <div className="rune-panel animate-fade-up" style={{
+            padding: '36px 32px', textAlign: 'center', maxWidth: '300px', width: '90%',
+          }}>
+            <p style={{ fontFamily: 'var(--font-cinzel)', color: '#d4a030', letterSpacing: '3px', fontSize: '10px', marginBottom: '20px' }}>
+              CHOOSE YOUR NAME
+            </p>
+            <input
+              type="text"
+              value={usernameInput}
+              onChange={e => setUsernameInput(e.target.value)}
+              placeholder="Traveler name..."
+              maxLength={20}
+              autoFocus
+              style={{
+                width: '100%',
+                fontFamily: 'var(--font-cinzel)',
+                fontSize: '16px',
+                letterSpacing: '2px',
+                color: '#d4a030',
+                background: 'transparent',
+                border: '1px solid #d4a030',
+                padding: '12px 16px',
+                textAlign: 'center',
+                outline: 'none',
+                marginBottom: '20px',
+              }}
+            />
+            <button
+              onClick={async () => {
+                if (!usernameInput.trim()) return;
+                const name = usernameInput.trim();
+                setGameState(prev => {
+                  if (!prev) return prev;
+                  const updated = { ...prev, player: { ...prev.player, username: name } };
+                  saveGameState(updated);
+                  return updated;
+                });
+                // Update in MongoDB too
+                if (gameState.player.playerId) {
+                  await fetch('/api/players', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      playerId: gameState.player.playerId,
+                      username: name,
+                      level: gameState.player.level,
+                      xp: gameState.player.xp,
+                      questsCompleted: gameState.player.completedQuests.length,
+                      totalDistance: gameState.player.totalDistance,
+                      achievements: gameState.player.achievements,
+                      lastLocation: gameState.player.lastLocation,
+                    }),
+                  });
+                }
+                setUsernameInput('');
+              }}
+              disabled={!usernameInput.trim()}
+              style={{
+                fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '4px',
+                color: usernameInput.trim() ? '#d4a030' : '#4e6878',
+                background: 'none', border: `1px solid ${usernameInput.trim() ? '#d4a030' : '#2a3d52'}`,
+                padding: '12px 32px', cursor: usernameInput.trim() ? 'pointer' : 'not-allowed',
+              }}
+            >
+              CLAIM NAME
+            </button>
+            <p style={{ fontSize: '10px', color: '#4e6878', marginTop: '16px', letterSpacing: '1px' }}>
+              Other players will see this
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── Achievement toast ─── */}
       {achievementToast && (
@@ -1184,6 +1425,7 @@ export default function Home() {
         <div key={tabFadeKey} className="animate-tab-fade">
           {activeTab === 'stats' && <StatsTab gameState={gameState} />}
           {activeTab === 'achievements' && <AchievementsTab unlockedIds={gameState.player.achievements} />}
+          {activeTab === 'rivals' && <LeaderboardTab gameState={gameState} />}
         </div>
       </main>
 

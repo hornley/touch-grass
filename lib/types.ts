@@ -15,6 +15,8 @@ export interface QuestHistoryEntry {
 }
 
 export interface Player {
+  playerId?: string;
+  username?: string;
   xp: number;
   level: number;
   lastLocation: Location | null;

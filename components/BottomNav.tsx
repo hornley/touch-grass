@@ -1,12 +1,13 @@
 'use client';
 import { useState, useCallback } from 'react';
 
-type Tab = 'home' | 'stats' | 'achievements';
+type Tab = 'home' | 'stats' | 'achievements' | 'rivals';
 
 const TABS: { id: Tab; icon: string; label: string }[] = [
-  { id: 'home',         icon: '⬡', label: 'REALM'  },
-  { id: 'stats',        icon: '◈', label: 'CODEX'  },
+  { id: 'home',          icon: '⬡', label: 'REALM'  },
+  { id: 'stats',         icon: '◈', label: 'CODEX'  },
   { id: 'achievements', icon: '✦', label: 'MARKS'  },
+  { id: 'rivals',       icon: '⚔', label: 'RIVALS' },
 ];
 
 export function BottomNav({ activeTab, onTabChange }: {
