@@ -9,26 +9,34 @@
 </div>
 
 ---
+## Live Demo
+[terra-quest-eta.vercel.app](https://terra-quest-eta.vercel.app/)
+
+---
+![LANDING](docs/UI.png)
+![1](docs/1.png)
+![2](docs/2.png)
+---
 
 ## Problem
 
-Most fitness apps track your movement but give you nothing back. There's no world at stake, no narrative, no consequence for staying on the couch.
+We spend hours trapped in endless content loops. Doomscrolling drains our energy, disconnects us from the physical world, and damages our mental health.
 
-- **No motivation loop** — steps counted, nothing changes
-- **No story** — data without meaning doesn't pull you outside
-- **No consequence** — skipping a day costs nothing
-- **No reward for offline time** — being away from your phone goes unacknowledged
+- **The Doomscroll Trap** — infinite feeds that keep us glued to screens
+- **Sedentary Habits** — losing the urge to step away from the couch
+- **Digital Burnout** — feeling exhausted from constant consumption
+- **Disconnection** — forgetting the simple benefits of going outside
 
 ---
 
 ## Solution
 
-TerraQuest ties your real-world GPS, camera, and time to a living fantasy realm that decays without you. Move through the physical world to heal it.
+TerraQuest gamifies "touching grass." It turns escaping the screen and moving in the physical world into an RPG where your actions heal a corrupted realm.
 
-- Walk required distances → reduce world corruption
-- Take photos in the real world → complete camera quests
-- Stay offline and return → earn XP for time spent away
-- Every action is local — no account, no server, no friction
+- Walk required distances → actively fight the decay of doomscrolling
+- Capture reality → use your camera to interact with the real world
+- Disconnect to win → earn rewards specifically for time spent offline
+- Action over consumption → literally go outside and touch grass to progress
 
 ---
 
