@@ -28,6 +28,7 @@ interface UseLocationResult {
 }
 
 const MIN_ACCURACY = 50;
+const ANDROID_MIN_ACCURACY = 80;
 
 function getMultiplier(state: MotionState): number {
   switch (state) {
@@ -42,6 +43,7 @@ function getMultiplier(state: MotionState): number {
 }
 
 export function useLocation(lastLocation: Location | null, enabled: boolean = false): UseLocationResult {
+  const isAndroid = typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent);
   const [location, setLocation] = useState<Location | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -64,6 +66,7 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
 
   const slidingWindowRef = useRef(createSlidingWindowTracker());
   const intervalRef = useRef<number | null>(null);
+  const watchRef = useRef<number | null>(null);
 
   const processLocation = useCallback((
     lat: number,
@@ -139,12 +142,13 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
 
       const accuracy = pos.coords.accuracy;
 
-      if (accuracy > MIN_ACCURACY) {
-        setCurrentAccuracy(accuracy);
-        setError(`Accuracy too poor: ${accuracy.toFixed(0)}m`);
-        setIsLoading(false);
-        return;
-      }
+    const maxAccuracy = isAndroid ? ANDROID_MIN_ACCURACY : MIN_ACCURACY;
+    if (accuracy > maxAccuracy) {
+      setCurrentAccuracy(accuracy);
+      setError(`Accuracy too poor: ${accuracy.toFixed(0)}m`);
+      setIsLoading(false);
+      return;
+    }
 
       processLocation(pos.coords.latitude, pos.coords.longitude, accuracy, Date.now());
     } catch (err) {
@@ -161,7 +165,7 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
     } finally {
       setIsLoading(false);
     }
-  }, [processLocation]);
+  }, [processLocation, isAndroid]);
 
   const fetchLocation = useCallback(async () => {
     const params = new URLSearchParams(window.location.search);
@@ -186,15 +190,16 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
 
       const accuracy = pos.coords.accuracy;
 
-      if (accuracy > MIN_ACCURACY) {
-        setCurrentAccuracy(accuracy);
-        return;
-      }
+    const maxAccuracy = isAndroid ? ANDROID_MIN_ACCURACY : MIN_ACCURACY;
+    if (accuracy > maxAccuracy) {
+      setCurrentAccuracy(accuracy);
+      return;
+    }
 
       processLocation(pos.coords.latitude, pos.coords.longitude, accuracy, Date.now());
     } catch {
     }
-  }, [processLocation]);
+  }, [processLocation, isAndroid]);
 
   useEffect(() => {
     if (enabled && !location) {
@@ -204,7 +209,27 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
 
   useEffect(() => {
     if (enabled && location) {
-      intervalRef.current = window.setInterval(fetchLocation, 5000);
+      if (isAndroid) {
+        watchRef.current = navigator.geolocation.watchPosition(
+          (pos) => {
+            const accuracy = pos.coords.accuracy;
+            const maxAccuracy = ANDROID_MIN_ACCURACY;
+            if (accuracy > maxAccuracy) {
+              setCurrentAccuracy(accuracy);
+              return;
+            }
+            processLocation(pos.coords.latitude, pos.coords.longitude, accuracy, Date.now());
+          },
+          () => {},
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0,
+          },
+        );
+      } else {
+        intervalRef.current = window.setInterval(fetchLocation, 5000);
+      }
     }
 
     return () => {
@@ -212,8 +237,12 @@ export function useLocation(lastLocation: Location | null, enabled: boolean = fa
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+      if (watchRef.current !== null) {
+        navigator.geolocation.clearWatch(watchRef.current);
+        watchRef.current = null;
+      }
     };
-  }, [enabled, location, fetchLocation]);
+  }, [enabled, location, fetchLocation, isAndroid, processLocation]);
 
   return {
     location,
