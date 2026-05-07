@@ -125,8 +125,11 @@ export function analyzeMeditation(landmarks: { x: number; y: number; z: number }
   const torsoLength = hipMidY - shoulderMidY;
   const legTorsoGap = kneeMidY - hipMidY;
 
-  const isSitting = legTorsoGap < 0.35 && torsoLength < 0.35;
-  const legsCrossed = ankleWidth < hipWidth * 1.2 && ankleMidY > kneeMidY - 0.05;
+  // Prevent false positives from users lifting both feet into frame
+  const atLeastOneFootGrounded = Math.min(leftAnkle.y, rightAnkle.y) >= hipMidY - 0.10;
+  const atLeastOneKneeGrounded = Math.min(leftKnee.y, rightKnee.y) >= hipMidY - 0.20;
+  const isSitting = legTorsoGap < 0.35 && torsoLength < 0.35 && atLeastOneKneeGrounded;
+  const legsCrossed = ankleWidth < hipWidth * 1.2 && ankleMidY > kneeMidY - 0.05 && atLeastOneFootGrounded;
 
   const sitting = isSitting ? 0.8 : 0;
   const stillness = 0.7;
