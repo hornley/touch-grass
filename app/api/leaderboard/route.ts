@@ -38,8 +38,14 @@ export async function GET(request: Request) {
     }));
 
     return Response.json({ type, leaderboard: ranked });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[leaderboard GET]', err);
-    return Response.json({ error: String(err) }, { status: 500 });
+    return Response.json({
+      error: String(err),
+      code: err?.code,
+      codeName: err?.codeName,
+      errorLabels: err?.errorLabels,
+      stack: err?.stack?.split('\n').slice(0, 5),
+    }, { status: 500 });
   }
 };
