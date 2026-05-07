@@ -152,20 +152,17 @@ export async function fetchNearbyPois(lat: number, lng: number, radius: number =
     out center tags;
   `;
 
-  try {
-    const response = await fetch('https://osm.hpi.de/overpass/api/interpreter', {
-      method: 'POST',
-      body: query,
-    });
-    if (!response.ok) return [];
-    const data = await response.json();
-    const items = formatPoiResults(data.elements ?? []);
-    const cache: CachedPois = { timestamp: Date.now(), items };
-    localStorage.setItem(cacheKey, JSON.stringify(cache));
-    return items;
-  } catch {
-    return [];
-  }
+  const response = await fetch('https://osm.hpi.de/overpass/api/interpreter', {
+    method: 'POST',
+    body: query,
+  });
+
+  if (!response.ok) return [];
+  const data = await response.json();
+  const items = formatPoiResults(data.elements ?? []);
+  const cache: CachedPois = { timestamp: Date.now(), items };
+  localStorage.setItem(cacheKey, JSON.stringify(cache));
+  return items;
 }
 
 function pickRandom<T>(items: T[]): T {
