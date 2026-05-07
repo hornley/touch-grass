@@ -25,6 +25,9 @@ export const QUEST_POOL: Omit<Quest, 'status' | 'progress'>[] = [
   { id: 'quest_12', type: 'object', goal: 1, xpReward: 20, description: 'Find a book', targetObject: 'book' },
   { id: 'quest_14', type: 'object', goal: 1, xpReward: 25, description: 'Find a person', targetObject: 'person' },
   { id: 'quest_15', type: 'object', goal: 1, xpReward: 25, description: 'Find a cat or dog', targetObject: 'pet' },
+  { id: 'quest_timed_1', type: 'timed', goal: 50,  xpReward: 15, description: 'Walk 50 meters within the time limit', minLevel: 2 },
+  { id: 'quest_timed_2', type: 'timed', goal: 100, xpReward: 25, description: 'Walk 100 meters before time runs out', minLevel: 3 },
+  { id: 'quest_timed_3', type: 'timed', goal: 200, xpReward: 40, description: 'Traverse 200 meters against the clock', minLevel: 5, bonusXpMultiplier: 1.3 },
 ];
 
 export type QuestTemplate = Omit<Quest, 'status' | 'progress' | 'id'> & {
@@ -196,12 +199,16 @@ function buildVisitQuest(template: QuestTemplate, poi: PoiResult, isCryptic: boo
 
 function buildQuestFromTemplate(template: QuestTemplate): Quest {
   const { templateId, ...rest } = template;
-  return {
+  const base = {
     id: makeQuestId(templateId),
     status: 'active',
     progress: 0,
     ...rest,
   };
+  if (base.type === 'timed') {
+    return getTimedQuest(base);
+  }
+  return { ...base, id: base.id ?? makeQuestId(templateId), status: 'active' as const, progress: 0 };
 }
 
 function getFallbackQuest(): Quest {
@@ -287,6 +294,9 @@ export function getInitialState(): GameState {
     lastAway: null,
     sessions: [],
     currentSession: null,
+    timerStartedAt: null,
+    timerExpiresAt: null,
+    isReady: false,
   };
 }
 
@@ -312,6 +322,12 @@ export function loadGameState(): GameState {
       } catch {
         // Ignore storage write failures during migration and keep the parsed state.
       }
+    }
+    if (parsed.player.questHistory) {
+      parsed.player.questHistory = parsed.player.questHistory.map((entry: QuestHistoryEntry) => ({
+        ...entry,
+        outcome: entry.outcome ?? 'completed',
+      }));
     }
     return parsed;
   } catch {
@@ -350,10 +366,51 @@ export function getQuestXpMultiplier(level: number): number {
   return 1.0;
 }
 
+function calculateTimeLimit(goalMeters: number): number {
+  const walkingSpeedMPS = 1.39;
+  const bufferSeconds = 120;
+  return Math.round((goalMeters / walkingSpeedMPS) + bufferSeconds);
+}
+
+function getTimedQuest(template: Omit<Quest, 'status' | 'progress' | 'id'>): Quest {
+  const timeLimitSeconds = calculateTimeLimit(template.goal);
+  return {
+    ...template,
+    id: `timed_${Math.random().toString(36).slice(2, 8)}`,
+    status: 'active',
+    progress: 0,
+    timeLimitSeconds,
+  };
+}
+
+export function finalizeQuestState(
+  state: GameState,
+  historyEntry?: QuestHistoryEntry,
+): GameState {
+  return {
+    ...state,
+    currentQuest: null,
+    isReady: true,
+    timerStartedAt: null,
+    timerExpiresAt: null,
+    player: historyEntry
+      ? {
+          ...state.player,
+          questHistory: addQuestToHistory(state.player.questHistory ?? [], historyEntry),
+        }
+      : state.player,
+  };
+}
+
 export function getRandomQuest(completedIds: string[], level: number = 1): Quest {
   const available = QUEST_POOL.filter(q => !completedIds.includes(q.id) && (q.minLevel ?? 1) <= level);
   const pool = available.length > 0 ? available : QUEST_POOL.filter(q => (q.minLevel ?? 1) <= level);
   const selected = pool[Math.floor(Math.random() * pool.length)];
+
+  if (selected.type === 'timed') {
+    return getTimedQuest(selected);
+  }
+
   return {
     ...selected,
     status: 'active',

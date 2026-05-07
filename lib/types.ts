@@ -12,6 +12,7 @@ export interface QuestHistoryEntry {
   timestamp: number;
   chainId?: string;
   chainStep?: number;
+  outcome?: 'completed' | 'skipped' | 'failed';
 }
 
 export interface Player {
@@ -32,9 +33,11 @@ export interface Player {
   chainCompletions: number;
 }
 
+export type QuestType = 'travel' | 'photo' | 'wait' | 'meditate' | 'object' | 'visit' | 'timed';
+
 export interface Quest {
   id: string;
-  type: 'travel' | 'photo' | 'wait' | 'meditate' | 'object' | 'visit';
+  type: QuestType;
   status: 'active' | 'completed';
   progress: number;
   goal: number;
@@ -47,6 +50,8 @@ export interface Quest {
   targetLng?: number;
   radiusM?: number;
   isCryptic?: boolean;
+  timeLimitSeconds?: number;
+  bonusXpMultiplier?: number;
 }
 
 export interface ChainState {
@@ -77,4 +82,7 @@ export interface GameState {
   lastAway: number | null;
   sessions: Session[];
   currentSession: CurrentSession | null;
+  timerStartedAt: number | null;
+  timerExpiresAt: number | null;
+  isReady: boolean;
 }

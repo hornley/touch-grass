@@ -1,6 +1,6 @@
 'use client';
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { GameState } from '@/lib/types';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { GameState, Quest } from '@/lib/types';
 import {
   loadGameState,
   saveGameState,
@@ -17,6 +17,7 @@ import {
   calculateDistance,
   fetchNearbyPois,
   addQuestToHistory,
+  finalizeQuestState,
 } from '@/lib/game';
 import { useLocation } from '@/lib/useLocation';
 import { CameraCapture } from '@/components/CameraCapture';
@@ -28,6 +29,7 @@ import { AchievementsTab } from '@/components/AchievementsTab';
 import { LeaderboardTab } from '@/components/LeaderboardTab';
 import { TravelMapWrapper } from '@/components/TravelMapWrapper';
 import VisitQuestMapWrapper from '@/components/VisitQuestMapWrapper';
+import { isEventWindow } from '@/lib/sunTimes';
 
 type Tab = 'home' | 'stats' | 'achievements' | 'rivals';
 
@@ -86,6 +88,12 @@ export default function Home() {
   const lastUpdateRef = useRef<number>(0);
   const UPDATE_INTERVAL = 5000; // Only update once per 5 seconds
   const [migrated, setMigrated] = useState(false);
+  const [skipConfirmOpen, setSkipConfirmOpen] = useState(false);
+  const [pendingSkipQuest, setPendingSkipQuest] = useState<Quest | null>(null);
+  const [timerRemaining, setTimerRemaining] = useState<number | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [loadingNextQuest, setLoadingNextQuest] = useState(false);
+  const timerExpiredFired = useRef(false);
 
   const lastLocation = gameState?.player.lastLocation ?? null;
   const { location, error, isLoading, requestLocation, lastMovementDistance, currentAccuracy, motionState, debugInfo } = useLocation(lastLocation, locationEnabled);
@@ -93,6 +101,10 @@ export default function Home() {
   const lastLocationForQuest = (location ?? lastLocation)
     ? { lat: (location ?? lastLocation)!.lat, lng: (location ?? lastLocation)!.lng }
     : null;
+
+  const currentEventWindow = useMemo(() => {
+    return isEventWindow(location?.lat ?? 0, location?.lng ?? 0);
+  }, [location?.lat, location?.lng]);
 
   const getNextQuestWithPois = useCallback(async (
     completedIds: string[],
@@ -137,6 +149,9 @@ export default function Home() {
 
     const newState: GameState = {
       ...loaded,
+      timerStartedAt: loaded.timerStartedAt ?? null,
+      timerExpiresAt: loaded.timerExpiresAt ?? null,
+      isReady: loaded.isReady ?? true,
       player: {
         ...loaded.player,
         streak: streakResult.streak,
@@ -429,12 +444,130 @@ export default function Home() {
         if (!chainCompleted) {
           setQuestMessage(`QUEST COMPLETE  ·  +${xp} XP`);
         }
-        setGameState(newState);
+        setGameState(prev => {
+          if (!prev) return prev;
+          return finalizeQuestState(prev, {
+            questId: quest.id,
+            type: quest.type,
+            description: quest.description,
+            xpEarned: xp,
+            timestamp: Date.now(),
+            chainId: prev.player.currentChain?.id,
+            chainStep: prev.player.currentChain ? prev.player.currentChain.stepIndex + 1 : undefined,
+          });
+        });
       };
       
       completeQuest();
     }
   }, [gameState?.currentQuest?.progress]);
+
+  useEffect(() => {
+    if (!gameState?.timerExpiresAt) {
+      setTimerRemaining(null);
+      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+      timerExpiredFired.current = false;
+      return;
+    }
+    if (!isTracking) return;
+    timerRef.current = setInterval(() => {
+      const remaining = Math.max(0, gameState.timerExpiresAt! - Date.now());
+      setTimerRemaining(remaining);
+      if (remaining === 0 && !timerExpiredFired.current) {
+        timerExpiredFired.current = true;
+        if (timerRef.current) clearInterval(timerRef.current);
+        setGameState(prev => {
+          if (!prev || !prev.currentQuest) return prev;
+          const newState = finalizeQuestState(prev, {
+            questId: prev.currentQuest.id,
+            type: prev.currentQuest.type,
+            description: prev.currentQuest.description,
+            xpEarned: 0,
+            timestamp: Date.now(),
+            outcome: 'failed',
+          });
+          saveGameState(newState);
+          return newState;
+        });
+      }
+    }, 1000);
+    if (gameState.timerExpiresAt <= Date.now() && !timerExpiredFired.current) {
+      timerExpiredFired.current = true;
+      if (timerRef.current) clearInterval(timerRef.current);
+      setGameState(prev => {
+        if (!prev || !prev.currentQuest) return prev;
+        const newState = finalizeQuestState(prev, {
+          questId: prev.currentQuest.id,
+          type: prev.currentQuest.type,
+          description: prev.currentQuest.description,
+          xpEarned: 0,
+          timestamp: Date.now(),
+          outcome: 'failed',
+        });
+        saveGameState(newState);
+        return newState;
+      });
+    }
+  }, [gameState?.timerExpiresAt]);
+
+  const handleSkipClick = useCallback(() => {
+    if (!gameState?.currentQuest) return;
+    setPendingSkipQuest(gameState.currentQuest);
+    setSkipConfirmOpen(true);
+  }, [gameState]);
+
+  const confirmSkip = useCallback(() => {
+    if (!gameState || !pendingSkipQuest) return;
+    setSkipConfirmOpen(false);
+    setPendingSkipQuest(null);
+    setGameState(prev => {
+      if (!prev) return prev;
+      const newState = finalizeQuestState(prev, {
+        questId: pendingSkipQuest.id,
+        type: pendingSkipQuest.type,
+        description: pendingSkipQuest.description,
+        xpEarned: 0,
+        timestamp: Date.now(),
+        outcome: 'skipped',
+      });
+      saveGameState(newState);
+      return newState;
+    });
+  }, [gameState, pendingSkipQuest]);
+
+  const handleBeginJourney = useCallback(() => {
+    if (!gameState?.currentQuest || gameState.currentQuest.type !== 'timed') return;
+    const seconds = gameState.currentQuest.timeLimitSeconds ?? 300;
+    const startedAt = Date.now();
+    const expiresAt = startedAt + seconds * 1000;
+    timerExpiredFired.current = false;
+    setGameState(prev => {
+      if (!prev) return prev;
+      const newState = { ...prev, timerStartedAt: startedAt, timerExpiresAt: expiresAt };
+      saveGameState(newState);
+      return newState;
+    });
+  }, [gameState]);
+
+  const handleGiveQuest = useCallback(() => {
+    if (!gameState || loadingNextQuest) return;
+    setLoadingNextQuest(true);
+    const assign = async () => {
+      const prev = gameState;
+      const completedIds = prev.currentQuest && prev.currentQuest.status === 'completed'
+        ? [...prev.player.completedQuests, prev.currentQuest.id]
+        : prev.player.completedQuests;
+      const result = await getNextQuestWithPois(completedIds, prev.player.level, prev.player.currentChain, lastLocationForQuest);
+      setGameState(prevState => {
+        if (!prevState) return prevState;
+        const s: GameState = { ...prevState, currentQuest: result.quest, player: { ...prevState.player, currentChain: result.chain }, timerStartedAt: null, timerExpiresAt: null };
+        saveGameState(s);
+        return s;
+      });
+      setLoadingNextQuest(false);
+    };
+    assign();
+  }, [gameState, loadingNextQuest, getNextQuestWithPois, lastLocationForQuest]);
 
   const handleStart = () => {
     if (!gameState || !usernameInput.trim()) return;
@@ -571,7 +704,18 @@ export default function Home() {
       if (!chainCompleted) {
         setQuestMessage(`${prev.currentQuest.type === 'visit' ? 'VISITED' : 'CAPTURED'}  ·  +${xp} XP`);
       }
-      setGameState(newState);
+      setGameState(prev => {
+        if (!prev?.currentQuest) return prev;
+        return finalizeQuestState(prev, {
+          questId: prev.currentQuest.id,
+          type: prev.currentQuest.type,
+          description: prev.currentQuest.description,
+          xpEarned: xp,
+          timestamp: Date.now(),
+          chainId: prev.player.currentChain?.id,
+          chainStep: prev.player.currentChain ? prev.player.currentChain.stepIndex + 1 : undefined,
+        });
+      });
       setVisitCapturePending(false);
     };
 
@@ -642,7 +786,18 @@ export default function Home() {
       if (!chainCompleted) {
         setQuestMessage(`CENTERED  ·  +${xp} XP`);
       }
-      setGameState(newState);
+      setGameState(prev => {
+        if (!prev?.currentQuest) return prev;
+        return finalizeQuestState(prev, {
+          questId: prev.currentQuest.id,
+          type: prev.currentQuest.type,
+          description: prev.currentQuest.description,
+          xpEarned: xp,
+          timestamp: Date.now(),
+          chainId: prev.player.currentChain?.id,
+          chainStep: prev.player.currentChain ? prev.player.currentChain.stepIndex + 1 : undefined,
+        });
+      });
     };
 
     finalize();
@@ -712,7 +867,18 @@ export default function Home() {
       if (!chainCompleted) {
         setQuestMessage(`DISCOVERED  ·  +${xp} XP`);
       }
-      setGameState(newState);
+      setGameState(prev => {
+        if (!prev?.currentQuest) return prev;
+        return finalizeQuestState(prev, {
+          questId: prev.currentQuest.id,
+          type: prev.currentQuest.type,
+          description: prev.currentQuest.description,
+          xpEarned: xp,
+          timestamp: Date.now(),
+          chainId: prev.player.currentChain?.id,
+          chainStep: prev.player.currentChain ? prev.player.currentChain.stepIndex + 1 : undefined,
+        });
+      });
     };
 
     finalize();
@@ -722,13 +888,20 @@ export default function Home() {
     if (!gameState?.currentQuest) return;
     const skip = async () => {
       if (!gameState || !gameState.currentQuest) return;
-      const result = await getNextQuestWithPois(gameState.player.completedQuests, gameState.player.level, gameState.player.currentChain, lastLocationForQuest);
-      const s = { ...gameState, currentQuest: result.quest, player: { ...gameState.player, currentChain: result.chain } };
-      saveGameState(s);
-      setGameState(s);
+      setGameState(prev => {
+        if (!prev?.currentQuest) return prev;
+        return finalizeQuestState(prev, {
+          questId: prev.currentQuest.id,
+          type: prev.currentQuest.type,
+          description: prev.currentQuest.description,
+          xpEarned: 0,
+          timestamp: Date.now(),
+          outcome: 'skipped',
+        });
+      });
     };
     skip();
-  }, [gameState, lastLocationForQuest, getNextQuestWithPois]);
+  }, [gameState]);
 
   const exitChain = useCallback(() => {
     if (!gameState) return;
@@ -915,6 +1088,7 @@ export default function Home() {
   const xpForThisLevel = Math.pow(gameState.player.level - 1, 2) * 100;
   const xpForNextLevel = getXpForNextLevel(gameState.player.level);
   const xpProgress = (gameState.player.xp - xpForThisLevel) / (xpForNextLevel - xpForThisLevel);
+  const showDebugPanel = false;
   const questBadge = gameState.currentQuest && {
     travel: { label: 'TRAVERSE', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.4)' },
     photo:  { label: 'CAPTURE',  color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.4)' },
@@ -922,6 +1096,7 @@ export default function Home() {
     meditate:{ label: 'YOGA',    color: '#10b981', bg: 'rgba(16,185,129,0.1)', border: 'rgba(16,185,129,0.4)' },
     object: { label: 'FIND',    color: '#f59e0b', bg: 'rgba(245,158,11,0.1)', border: 'rgba(245,158,11,0.4)' },
     visit: { label: 'VISIT',    color: '#ec4899', bg: 'rgba(236,72,153,0.1)', border: 'rgba(236,72,153,0.4)' },
+    timed: { label: 'RACE',    color: '#ef4444', bg: 'rgba(239,68,68,0.1)',  border: 'rgba(239,68,68,0.4)' },
   }[gameState.currentQuest.type];
 
   // ── Main game render ────────────────────────────────────────
@@ -1154,6 +1329,58 @@ export default function Home() {
         </div>
       )}
 
+      {/* ── Skip confirmation modal ─── */}
+      {skipConfirmOpen && pendingSkipQuest && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 70,
+            background: 'rgba(6, 10, 14, 0.7)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '24px',
+            backdropFilter: 'blur(6px)',
+          }}
+          onClick={() => setSkipConfirmOpen(false)}
+        >
+          <div
+            style={{
+              width: '100%', maxWidth: '420px',
+              background: 'linear-gradient(160deg, #101a14, #0b1118)',
+              border: '1px solid rgba(239,68,68,0.35)',
+              boxShadow: '0 24px 80px rgba(5, 12, 18, 0.6)',
+              padding: '22px',
+            }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+              <div>
+                <p style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '3px', color: '#fca5a5', marginBottom: '6px' }}>
+                  ABANDON QUEST
+                </p>
+                <p style={{ fontFamily: 'var(--font-cinzel)', fontSize: '18px', color: '#d4a030' }}>
+                  Abandons the quest without XP
+                </p>
+              </div>
+              <button onClick={() => setSkipConfirmOpen(false)} style={{ color: '#93a6b3', fontSize: '18px', background: 'none', border: 'none', cursor: 'pointer', lineHeight: 1 }}>
+                ×
+              </button>
+            </div>
+            <div style={{ fontSize: '13px', color: '#cdd8e2', lineHeight: 1.6, border: '1px solid rgba(69,55,45,0.4)', background: 'rgba(12,20,18,0.7)', padding: '12px 14px', marginBottom: '16px' }}>
+              {pendingSkipQuest.description}
+            </div>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button onClick={() => setSkipConfirmOpen(false)} style={{ flex: 1, fontFamily: 'var(--font-cinzel)', fontSize: '11px', letterSpacing: '3px', color: '#6a8898', background: 'none', border: '1px solid #2a3d52', padding: '12px 16px', cursor: 'pointer' }}>
+                KEEP QUEST
+              </button>
+              <button onClick={confirmSkip} style={{ flex: 1, fontFamily: 'var(--font-cinzel)', fontSize: '11px', letterSpacing: '3px', color: '#fca5a5', background: 'none', border: '1px solid #ef4444', padding: '12px 16px', cursor: 'pointer' }}>
+                ABANDON ANYWAY
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Main content ─── */}
       <main className="main-scroll" style={{ flex: 1, overflowY: 'auto', paddingBottom: '72px', position: 'relative', zIndex: 1 }}>
 
@@ -1207,12 +1434,28 @@ export default function Home() {
                   </div>
                 )}
 
-                {gameState.currentQuest ? (
+                {!gameState.currentQuest ? (
+                  <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                    <p style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '4px', color: '#4e6878', marginBottom: '20px' }}>
+                      NO QUEST ACTIVE
+                    </p>
+                    <button
+                      onClick={handleGiveQuest}
+                      disabled={loadingNextQuest}
+                      style={{
+                        fontFamily: 'var(--font-cinzel)', fontSize: '12px', letterSpacing: '4px',
+                        color: '#0d1520', background: 'linear-gradient(90deg, #d4a030, #f5d060)',
+                        border: 'none', padding: '14px 32px', cursor: loadingNextQuest ? 'not-allowed' : 'pointer',
+                        boxShadow: '0 0 24px rgba(212,160,48,0.3)',
+                        opacity: loadingNextQuest ? 0.6 : 1,
+                      }}
+                    >
+                      {loadingNextQuest ? 'LOADING...' : 'GIVE ME A QUEST'}
+                    </button>
+                  </div>
+                ) : (
                   <div>
-                    <p style={{
-                      fontSize: '15px', color: '#d4bc8a', lineHeight: 1.7,
-                      marginBottom: '18px', letterSpacing: '0.3px',
-                    }}>
+                    <p style={{ fontSize: '15px', color: '#d4bc8a', lineHeight: 1.7, marginBottom: '18px', letterSpacing: '0.3px' }}>
                       {gameState.currentQuest.description}
                     </p>
 
@@ -1225,24 +1468,59 @@ export default function Home() {
                       </span>
                     </div>
 
+                    {gameState.currentQuest.type === 'timed' && (
+                      <div>
+                        {timerRemaining !== null ? (
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                              <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '10px', letterSpacing: '2px', color: timerRemaining < 60 ? '#ef4444' : '#d4a030' }}>
+                                {Math.floor(timerRemaining / 60)}:{(timerRemaining % 60).toString().padStart(2, '0')}
+                              </span>
+                              {timerRemaining < 60 && <span style={{ fontSize: '10px', color: '#ef4444', letterSpacing: '1px' }}>HURRY</span>}
+                            </div>
+                            <div style={{ height: '5px', background: '#172030', border: '1px solid #2a3d52', overflow: 'hidden', marginBottom: '6px' }}>
+                              <div style={{ height: '100%', width: `${Math.min(100, (gameState.currentQuest.progress / gameState.currentQuest.goal) * 100)}%`, background: timerRemaining < 60 ? 'linear-gradient(90deg,#dc2626,#ef4444)' : 'linear-gradient(90deg,#b45309,#f59e0b)', transition: 'width 0.5s ease' }} />
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                              <span style={{ fontSize: '10px', color: '#6a8898' }}>PROGRESS</span>
+                              <span style={{ fontFamily: 'var(--font-cinzel)', fontSize: '11px', color: '#f59e0b' }}>
+                                {Math.round(gameState.currentQuest.progress)} M &nbsp;╱&nbsp; {gameState.currentQuest.goal} M
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <p style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px', marginBottom: '12px' }}>
+                              Press BEGIN JOURNEY to start the race
+                            </p>
+                            <button
+                              onClick={handleBeginJourney}
+                              style={{
+                                fontFamily: 'var(--font-cinzel)',
+                                fontSize: '11px',
+                                letterSpacing: '3px',
+                                color: '#d4a030',
+                                background: 'transparent',
+                                border: '1px solid #d4a030',
+                                padding: '10px 18px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              BEGIN JOURNEY
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                     {gameState.currentQuest.type === 'travel' && (
                       <div>
                         {location ? (
-                          <TravelMapWrapper
-                            currentLocation={location}
-                            motionState={motionState}
-                            progress={gameState.currentQuest.progress}
-                            goal={gameState.currentQuest.goal}
-                          />
+                          <TravelMapWrapper currentLocation={location} motionState={motionState} progress={gameState.currentQuest.progress} goal={gameState.currentQuest.goal} />
                         ) : (
-                          <>
+                          <div>
                             <div style={{ height: '5px', background: '#172030', border: '1px solid #2a3d52', overflow: 'hidden', marginBottom: '6px' }}>
-                              <div style={{
-                                height: '100%',
-                                width: `${Math.min(100, (gameState.currentQuest.progress / gameState.currentQuest.goal) * 100)}%`,
-                                background: 'linear-gradient(90deg, #1e3a8a, #3b82f6)',
-                                transition: 'width 0.5s ease',
-                              }} />
+                              <div style={{ height: '100%', width: `${Math.min(100, (gameState.currentQuest.progress / gameState.currentQuest.goal) * 100)}%`, background: 'linear-gradient(90deg, #1e3a8a, #3b82f6)', transition: 'width 0.5s ease' }} />
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                               <span style={{ fontSize: '10px', color: '#6a8898' }}>PROGRESS</span>
@@ -1250,88 +1528,57 @@ export default function Home() {
                                 {Math.round(gameState.currentQuest.progress)} M &nbsp;╱&nbsp; {gameState.currentQuest.goal} M
                               </span>
                             </div>
-                          </>
+                          </div>
                         )}
                       </div>
                     )}
 
-                    {gameState.currentQuest.type === 'photo' && (
-                      <CameraCapture onCapture={handlePhotoCapture} />
-                    )}
-
-                    {gameState.currentQuest.type === 'wait' && (
-                      <p style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px' }}>
-                        Leave the app for 5+ minutes, then return to claim your reward.
-                      </p>
-                    )}
-
-                    {gameState.currentQuest.type === 'meditate' && (
-                      <PoseDetection
-                        duration={gameState.currentQuest.goal}
-                        onComplete={handleMeditateComplete}
-                      />
-                    )}
-
-                    {gameState.currentQuest.type === 'object' && (
-                      <ObjectDetection
-                        targetObject={gameState.currentQuest.targetObject || 'tree'}
-                        onComplete={handleObjectComplete}
-                      />
-                    )}
-
+                    {gameState.currentQuest.type === 'photo' && <CameraCapture onCapture={handlePhotoCapture} />}
+                    {gameState.currentQuest.type === 'wait' && <p style={{ fontSize: '11px', color: '#6a8898', letterSpacing: '1px' }}>Leave the app for 5+ minutes, then return to claim your reward.</p>}
+                    {gameState.currentQuest.type === 'meditate' && <PoseDetection duration={gameState.currentQuest.goal} onComplete={handleMeditateComplete} />}
+                    {gameState.currentQuest.type === 'object' && <ObjectDetection targetObject={gameState.currentQuest.targetObject || 'tree'} onComplete={handleObjectComplete} />}
                     {gameState.currentQuest.type === 'visit' && (
                       <div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                          <span style={{ fontSize: '10px', color: visitCapturePending ? '#4ade80' : '#f59e0b', letterSpacing: '1px' }}>
-                            {visitCapturePending ? 'IN RANGE' : 'MOVE CLOSER'}
-                          </span>
+                          <span style={{ fontSize: '10px', color: visitCapturePending ? '#4ade80' : '#f59e0b', letterSpacing: '1px' }}>{visitCapturePending ? 'IN RANGE' : 'MOVE CLOSER'}</span>
                           <div style={{ flex: 1, height: '4px', background: '#172030', border: '1px solid #2a3d52', overflow: 'hidden' }}>
-                            <div style={{
-                              height: '100%',
-                              width: visitCapturePending ? '100%' : '35%',
-                              background: visitCapturePending ? 'linear-gradient(90deg,#16a34a,#4ade80)' : 'linear-gradient(90deg,#f59e0b,#fbbf24)',
-                              transition: 'width 0.4s ease',
-                            }} />
+                            <div style={{ height: '100%', width: visitCapturePending ? '100%' : '35%', background: visitCapturePending ? 'linear-gradient(90deg,#16a34a,#4ade80)' : 'linear-gradient(90deg,#f59e0b,#fbbf24)', transition: 'width 0.4s ease' }} />
                           </div>
                         </div>
                         <p style={{ fontSize: '11px', color: '#9d174d', letterSpacing: '1px', marginBottom: '10px' }}>
-                          {gameState.currentQuest.isCryptic
-                            ? 'A nearby location calls to you. Find it within 50 meters and capture proof.'
-                            : `Travel within ${gameState.currentQuest.radiusM ?? 50}m of ${gameState.currentQuest.targetName || 'the target'}, then take a photo.`}
+                          {gameState.currentQuest.isCryptic ? 'A nearby location calls to you. Find it within 50 meters and capture proof.' : `Travel within ${gameState.currentQuest.radiusM ?? 50}m of ${gameState.currentQuest.targetName || 'the target'}, then take a photo.`}
                         </p>
                         {location && gameState.currentQuest.targetLat && gameState.currentQuest.targetLng && (
-                          <VisitQuestMapWrapper
-                            currentLocation={location}
-                            targetLat={gameState.currentQuest.targetLat}
-                            targetLng={gameState.currentQuest.targetLng}
-                            targetName={gameState.currentQuest.targetName || 'Target'}
-                            radiusM={gameState.currentQuest.radiusM ?? 50}
-                          />
+                          <VisitQuestMapWrapper currentLocation={location} targetLat={gameState.currentQuest.targetLat} targetLng={gameState.currentQuest.targetLng} targetName={gameState.currentQuest.targetName || 'Target'} radiusM={gameState.currentQuest.radiusM ?? 50} />
                         )}
                         <CameraCapture onCapture={handlePhotoCapture} disabled={!visitCapturePending} />
                       </div>
                     )}
-                  </div>
-                ) : (
-                  <div style={{
-                    textAlign: 'center', padding: '20px',
-                    border: '1px dashed #2a3d52', borderRadius: '4px',
-                    background: 'rgba(23,32,48,0.3)',
-                  }}>
-                    <div style={{ fontSize: '24px', marginBottom: '8px', opacity: 0.4 }}>⬡</div>
-                    <p style={{
-                      fontFamily: 'var(--font-cinzel)', fontSize: '10px',
-                      letterSpacing: '3px', color: '#4e6878',
-                    }}>NO ACTIVE QUEST</p>
-                    <p style={{
-                      fontSize: '10px', color: '#3a4e60', marginTop: '8px',
-                    }}>Complete current quest to receive next</p>
+
+                    <button
+                      onClick={handleSkipClick}
+                      disabled={loadingNextQuest}
+                      style={{
+                        marginTop: '16px',
+                        fontFamily: 'var(--font-cinzel)',
+                        fontSize: '10px',
+                        letterSpacing: '3px',
+                        color: '#fca5a5',
+                        background: 'none',
+                        border: '1px solid #ef4444',
+                        padding: '10px 16px',
+                        cursor: loadingNextQuest ? 'not-allowed' : 'pointer',
+                        opacity: loadingNextQuest ? 0.6 : 1,
+                      }}
+                    >
+                      ABANDON QUEST
+                    </button>
                   </div>
                 )}
               </div>
 
               {/* Debug panel */}
-              {true && (
+              {showDebugPanel && gameState && (
                 <div style={{
                   background: '#111820', border: '1px solid #92400e',
                   padding: '12px 14px', marginBottom: '14px',
@@ -1366,7 +1613,9 @@ export default function Home() {
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px', maxHeight: '100px', overflowY: 'auto' }}>
                     {QUEST_POOL.map(q => {
                       const isCompleted = gameState.player.completedQuests.includes(q.id);
-                      const canPlay = (q.minLevel ?? 1) <= gameState.player.level;
+                      const canPlay = q.type === 'timed'
+                        ? true
+                        : (q.minLevel ?? 1) <= gameState.player.level;
                       return (
                         <button
                           key={q.id}
@@ -1475,8 +1724,12 @@ export default function Home() {
                     <div>speed: <span style={{ color: debugInfo.gpsSpeed > 0.3 ? '#4ade80' : '#6a8898' }}>{debugInfo.gpsSpeed.toFixed(2)}m/s</span></div>
                     <div>recent: <span style={{ color: debugInfo.recentSpeed > 0.3 ? '#4ade80' : '#6a8898' }}>{debugInfo.recentSpeed.toFixed(2)}m/s</span></div>
                     <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #1e2e3e' }}>PROGRESS:</div>
-                    <div>lastMovement: <span style={{ color: '#d4a030' }}>{lastMovementDistance.toFixed(2)} m</span>
-                    <div>quest: <span style={{ color: gameState?.currentQuest ? (gameState.currentQuest.type === 'travel' ? '#4ade80' : '#fca5a5') : '#6a8898' }}>{gameState?.currentQuest ? `${gameState.currentQuest.type} (${gameState.currentQuest.progress}/${gameState.currentQuest.goal})` : 'NONE'}</span></div></div>
+                    <div>
+                      lastMovement: <span style={{ color: '#d4a030' }}>{lastMovementDistance.toFixed(2)} m</span>
+                    </div>
+                    <div>
+                      quest: <span style={{ color: gameState?.currentQuest ? (gameState.currentQuest.type === 'travel' ? '#4ade80' : '#fca5a5') : '#6a8898' }}>{gameState?.currentQuest ? `${gameState.currentQuest.type} (${gameState.currentQuest.progress}/${gameState.currentQuest.goal})` : 'NONE'}</span>
+                    </div>
                   </div>
 
                   {/* Actions */}
