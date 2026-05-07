@@ -24,12 +24,8 @@ export async function GET(request: Request) {
       .filter(p => {
         // Always include self
         if (p.playerId === currentPlayerId) return true;
-        // Filter out Traveler # placeholders with level 1, xp 0, questsCompleted 0
-        const isTraveler = /^Traveler #/.test(p.username ?? '');
-        const isLevelOne = p.level === 1;
-        const isNoXp = p.xp === 0;
-        const isNoQuests = p.questsCompleted === 0;
-        return !(isTraveler && isLevelOne && isNoXp && isNoQuests);
+        // Filter out accounts with level 1, 0 XP, and 0 quests
+        return !(p.level === 1 && p.xp === 0 && p.questsCompleted === 0);
       })
       .map(p => ({
         playerId: p.playerId,
