@@ -44,8 +44,8 @@ export async function GET(request: Request) {
       error: String(err),
       code: err?.code,
       codeName: err?.codeName,
-      errorLabels: err?.errorLabels,
-      stack: err?.stack?.split('\n').slice(0, 5),
+      uriSource: process.env.MONGODB_URI ? 'env' : 'hardcoded',
+      uriPrefix: (process.env.MONGODB_URI || 'mongodb+srv://terraadmin').slice(0, 30),
     }, { status: 500 });
   }
 };
