@@ -38,14 +38,8 @@ export async function GET(request: Request) {
     }));
 
     return Response.json({ type, leaderboard: ranked });
-  } catch (err: any) {
+  } catch (err) {
     console.error('[leaderboard GET]', err);
-    return Response.json({
-      error: String(err),
-      code: err?.code,
-      codeName: err?.codeName,
-      uriSource: process.env.MONGODB_URI ? 'env' : 'hardcoded',
-      uriPrefix: (process.env.MONGODB_URI || 'mongodb+srv://terraadmin').slice(0, 30),
-    }, { status: 500 });
+    return Response.json({ error: String(err) }, { status: 500 });
   }
 };
