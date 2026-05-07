@@ -152,7 +152,7 @@ export async function fetchNearbyPois(lat: number, lng: number, radius: number =
     out center tags;
   `;
 
-  const response = await fetch('https://overpass-api.de/api/interpreter', {
+  const response = await fetch('https://osm.hpi.de/overpass/api/interpreter', {
     method: 'POST',
     body: query,
   });
