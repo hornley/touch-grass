@@ -285,6 +285,13 @@ body {
   white-space: nowrap;
 }
 
+@keyframes timer-urgency {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.4; }
+}
+
+.timer-urgency { animation: timer-urgency 0.8s ease-in-out infinite; }
+
 .section-divider__line {
   flex: 1;
   height: 1px;
