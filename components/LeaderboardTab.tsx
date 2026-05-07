@@ -91,10 +91,10 @@ export function LeaderboardTab({ gameState }: { gameState: GameState }) {
     }
   }, []);
 
-  const fetchNearby = useCallback(async (lat: number, lng: number) => {
+  const fetchNearby = useCallback(async (lat: number, lng: number, playerId?: string) => {
     setNearbyLoading(true);
     try {
-      const res = await fetch(`/api/presence?lat=${lat}&lng=${lng}&radius=500`);
+      const res = await fetch(`/api/presence?lat=${lat}&lng=${lng}&radius=500${playerId ? `&playerId=${playerId}` : ''}`);
       const data = await res.json();
       setNearby(data.nearby ?? []);
     } catch {
@@ -104,6 +104,8 @@ export function LeaderboardTab({ gameState }: { gameState: GameState }) {
     }
   }, []);
 
+  const playerId = gameState.player.playerId;
+
   useEffect(() => {
     fetchLeaderboard(leaderboardType);
   }, [leaderboardType, fetchLeaderboard]);
@@ -111,11 +113,9 @@ export function LeaderboardTab({ gameState }: { gameState: GameState }) {
   useEffect(() => {
     const loc = gameState.player.lastLocation;
     if (loc?.lat && loc?.lng) {
-      fetchNearby(loc.lat, loc.lng);
+      fetchNearby(loc.lat, loc.lng, playerId);
     }
-  }, [gameState, fetchNearby]);
-
-  const playerId = gameState.player.playerId;
+  }, [gameState, fetchNearby, playerId]);
 
   return (
     <div style={{ padding: '24px 20px', maxWidth: '480px', margin: '0 auto' }}>

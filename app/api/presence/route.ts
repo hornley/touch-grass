@@ -7,6 +7,7 @@ export async function GET(request: Request) {
     const lat = parseFloat(url.searchParams.get('lat') ?? '');
     const lng = parseFloat(url.searchParams.get('lng') ?? '');
     const radius = Math.min(parseInt(url.searchParams.get('radius') ?? '500'), 2000);
+    const currentPlayerId = url.searchParams.get('playerId') ?? '';
 
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       return Response.json({ error: 'lat and lng required' }, { status: 400 });
@@ -20,6 +21,16 @@ export async function GET(request: Request) {
 
     const nearby = allPlayers
       .filter(p => p.lastLocation)
+      .filter(p => {
+        // Always include self
+        if (p.playerId === currentPlayerId) return true;
+        // Filter out Traveler # placeholders with level 1, xp 0, questsCompleted 0
+        const isTraveler = /^Traveler #/.test(p.username ?? '');
+        const isLevelOne = p.level === 1;
+        const isNoXp = p.xp === 0;
+        const isNoQuests = p.questsCompleted === 0;
+        return !(isTraveler && isLevelOne && isNoXp && isNoQuests);
+      })
       .map(p => ({
         playerId: p.playerId,
         username: p.username,

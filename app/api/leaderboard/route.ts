@@ -22,7 +22,14 @@ export async function GET(request: Request) {
     }
 
     const leaderboard = await players
-      .find({})
+      .find({
+        $or: [
+          { username: { $not: /^Traveler #/ } },
+          { level: { $ne: 1 } },
+          { xp: { $ne: 0 } },
+          { questsCompleted: { $ne: 0 } },
+        ],
+      })
       .sort({ [sortField]: sortOrder, xp: -1 })
       .limit(limit)
       .toArray();
