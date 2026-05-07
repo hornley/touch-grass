@@ -32,7 +32,14 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
   const targetInfo = targetConfig[targetObject] || { icon: '◈', label: targetObject };
   const targetLabel = targetInfo.label;
   const targetIcon = targetInfo.icon;
-  const detectionThreshold = 0.55;
+  const objectThresholds: Record<string, number> = {
+    book: 0.40,
+    cup: 0.40,
+    bottle: 0.40,
+    tree: 0.40,
+    default: 0.55,
+  };
+  const getThreshold = (target: string) => objectThresholds[target] ?? objectThresholds.default;
 
   useEffect(() => {
     if (stream && videoRef.current) {
@@ -61,7 +68,7 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const targetMatch = detectedObjects.find(
-      (obj) => matchesTarget(obj.label, targetObject) && obj.confidence > detectionThreshold
+      (obj) => matchesTarget(obj.label, targetObject) && obj.confidence > getThreshold(targetObject)
     );
 
     if (targetMatch?.boundingBox) {
@@ -94,7 +101,7 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
         }
       }
     }
-  }, [detectedObjects, targetObject, detectionThreshold]);
+  }, [detectedObjects, targetObject]);
 
   const startCamera = async () => {
     setIsStarting(true);
@@ -125,7 +132,7 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
         setDetectedObjects(results);
 
         const match = results.find((obj) =>
-          matchesTarget(obj.label, targetObject) && obj.confidence > detectionThreshold
+          matchesTarget(obj.label, targetObject) && obj.confidence > getThreshold(targetObject)
         );
 
         if (match && !found) {
@@ -139,7 +146,7 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
 
     const intervalId = setInterval(runDetection, 1000);
     return () => clearInterval(intervalId);
-  }, [stream, targetObject, onComplete, found, detectionThreshold]);
+  }, [stream, targetObject, onComplete, found]);
 
   if (error) {
     return (
@@ -226,7 +233,7 @@ export function ObjectDetection({ onComplete, targetObject }: ObjectDetectionPro
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center' }}>
             {detectedObjects.length > 0 ? (
               detectedObjects.map((obj, idx) => {
-                const isMatch = matchesTarget(obj.label, targetObject) && obj.confidence > detectionThreshold;
+                const isMatch = matchesTarget(obj.label, targetObject) && obj.confidence > getThreshold(targetObject);
                 return (
                   <span
                     key={idx}
