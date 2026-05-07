@@ -1105,7 +1105,7 @@ export default function Home() {
   const xpForThisLevel = Math.pow(gameState.player.level - 1, 2) * 100;
   const xpForNextLevel = getXpForNextLevel(gameState.player.level);
   const xpProgress = (gameState.player.xp - xpForThisLevel) / (xpForNextLevel - xpForThisLevel);
-  const showDebugPanel = true;
+  const showDebugPanel = false;
   const questBadge = gameState.currentQuest && {
     travel: { label: 'TRAVERSE', color: '#3b82f6', bg: 'rgba(59,130,246,0.1)', border: 'rgba(59,130,246,0.4)' },
     photo:  { label: 'CAPTURE',  color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)', border: 'rgba(139,92,246,0.4)' },
